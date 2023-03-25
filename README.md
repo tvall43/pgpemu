@@ -38,9 +38,13 @@ Open the folder `pgpemu-esp32` in VSCode. Run "ESP-IDF Build, Flash and Monitor"
 
 ### Upload Secrets
 
-Rename `secrets.example.yaml` to `secrets.yaml` and edit it with your dumped PGP secrets.
+Go to `./secrets`, rename `secrets.example.yaml` to `secrets.yaml` and edit it with your dumped PGP secrets.
 
-You'll need Python 3.9+ and [Poetry](https://python-poetry.org/).
+You'll need Python 3.9+ and [Poetry](https://python-poetry.org/). Install dependencies:
+
+```shell
+poetry install --no-root
+```
 
 Then upload your secrets to your device using:
 
