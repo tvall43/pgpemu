@@ -3,6 +3,8 @@
 //you can uncomment this line if you just want to test out the algorithms
 #error You are still using fake keys, checkout http:/tinyhack.com
 
+char *PGP_CLONE_NAME = "FakePGP";
+
 uint8_t MAC[6] = {0x01, 0x02, 0x02, 0x03, 0x04, 0x05};
 
 uint8_t BLOB[256] = {

@@ -5,6 +5,7 @@
 # BT config
 #
 CONFIG_BT_ENABLED=y
+CONFIG_BT_GATTS_ENABLE=y
 
 #
 # ESP32-specific config

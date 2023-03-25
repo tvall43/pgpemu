@@ -1,3 +1,7 @@
-cert-test: main/aes.c main/pgp-cert.c main/cert-test.c main/secrets.c 
-	   gcc -Wall -Imain main/aes.c main/pgp-cert.c main/cert-test.c main/secrets.c -o cert-test
-	   
+# build cert-test for PC to test app/device handshake
+cert-test: main/pc/*.c main/pgp-cert.c main/secrets.c 
+	gcc -Wall -Imain $^ -o cert-test
+
+.PHONY: clean
+clean:
+	rm -f cert-test

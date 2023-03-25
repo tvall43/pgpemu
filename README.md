@@ -1,7 +1,6 @@
-# Pokemon GO Plus reimplementation and firmware patching tool
+# Pokemon GO Plus reimplementation
 
-Note that this is unusable without a Mac address, BLOB and device key
+Subprojects:
 
-Please read:
+- [pgpemu-esp32](pgpemu-esp32)
 
-http://tinyhack.com/2018/11/21/reverse-engineering-pokemon-go-plus/
