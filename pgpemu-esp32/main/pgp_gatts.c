@@ -14,8 +14,6 @@
 #include "pgp_gatts.h"
 
 #include "log_tags.h"
-#include "pgpemu.h"
-#include "pgp_cert.h"
 #include "pgp_gap.h"
 #include "pgp_gatts_debug.h"
 #include "pgp_handshake.h"
@@ -282,9 +280,9 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
     }
     break;
     case ESP_GATTS_READ_EVT:
-        ESP_LOGI(BT_GATTS_TAG, "ESP_GATTS_READ_EVT: state=%d, %s", cert_state,
-                 char_name_from_handle(param->read.handle));
-        if (cert_state == 1)
+        ESP_LOGI(BT_GATTS_TAG, "ESP_GATTS_READ_EVT: %s, conn_id=%d",
+                 char_name_from_handle(param->read.handle), param->read.conn_id);
+        if (pgp_get_handshake_state(param->read.conn_id) == 1)
         {
             if (esp_log_level_get(BT_GATTS_TAG) >= ESP_LOG_VERBOSE)
             {
@@ -294,12 +292,13 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
         }
         break;
     case ESP_GATTS_WRITE_EVT:
-        ESP_LOGI(BT_GATTS_TAG, "ESP_GATTS_WRITE_EVT: %s", char_name_from_handle(param->write.handle));
+        ESP_LOGI(BT_GATTS_TAG, "ESP_GATTS_WRITE_EVT: %s, conn_id=%d",
+                 char_name_from_handle(param->write.handle), param->write.conn_id);
         if (!param->write.is_prep)
         {
             // the data length of gattc write  must be less than MAX_VALUE_LENGTH.
-            ESP_LOGD(BT_GATTS_TAG, "GATT_WRITE_EVT state=%d, handle=%d, value len=%d",
-                     cert_state, param->write.handle, param->write.len);
+            ESP_LOGD(BT_GATTS_TAG, "GATT_WRITE_EVT handle=%d, value len=%d",
+                     param->write.handle, param->write.len);
             if (esp_log_level_get(BT_GATTS_TAG) >= ESP_LOG_VERBOSE)
             {
                 ESP_LOGV(BT_GATTS_TAG, "DATA FROM APP");
@@ -308,49 +307,16 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
 
             if (certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_CFG] == param->write.handle)
             {
-
                 uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
-                if (descr_value == 0x0001)
-                {
-
-                    uint8_t notify_data[4];
-                    memset(notify_data, 0, 4);
-
-                    if (has_reconnect_key)
-                    {
-                        memset(cert_buffer, 0, 36);
-                        cert_buffer[0] = 3;
-                        notify_data[0] = 3;
-
-                        memcpy(cert_buffer + 4, reconnect_challenge, 32);
-                        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 36, cert_buffer);
-                        cert_state = 3;
-                    }
-                    else
-                    {
-                        generate_first_challenge();
-                        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 378, cert_buffer);
-                    }
-
-                    ESP_LOGD(BT_GATTS_TAG, "start CERT PAIRING len = %d", param->write.len);
-                    ESP_LOGD(BT_GATTS_TAG, "notify enable");
-                    // the size of notify_data[] need less than MTU size
-                    esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
-                                                sizeof(notify_data), notify_data, false);
-                }
-                else if (descr_value == 0x000)
-                {
-                    ESP_LOGD(BT_GATTS_TAG, "notify disable");
-                }
+                handle_pgp_handshake_first(gatts_if, descr_value,
+                                           cert_buffer, sizeof(cert_buffer),
+                                           param->write.conn_id);
             }
             else if (certificate_handle_table[IDX_CHAR_CENTRAL_TO_SFIDA_VAL] == param->write.handle)
             {
-                ESP_LOGD(BT_GATTS_TAG, "Write CENTRAL TO SFIDA: state=%d len=%d", cert_state, param->write.len);
-
-                handle_pgp_handshake(gatts_if,
-                                     param->write.value,
-                                     param->write.len,
-                                     param->write.conn_id);
+                handle_pgp_handshake_second(gatts_if,
+                                            param->write.value, param->write.len,
+                                            param->write.conn_id);
             }
             else if (led_button_handle_table[IDX_CHAR_LED_VAL] == param->write.handle)
             {
@@ -442,7 +408,8 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
         connectionEnd = 0;
         break;
     case ESP_GATTS_DISCONNECT_EVT:
-        cert_state = 0;
+        pgp_handshake_disconnect(param->disconnect.conn_id);
+
         connectionEnd = xTaskGetTickCount();
         ESP_LOGW(BT_GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, reason=%d, connected=%d ms",
                  param->disconnect.reason, pdTICKS_TO_MS(connectionEnd - connectionStart));
@@ -626,10 +593,10 @@ void pgp_exec_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepar
         if (certificate_handle_table[IDX_CHAR_CENTRAL_TO_SFIDA_VAL] == prepare_write_env->handle)
         {
 
-            handle_pgp_handshake(gatts_if,
-                                 prepare_write_env->prepare_buf,
-                                 prepare_write_env->prepare_len,
-                                 param->write.conn_id);
+            handle_pgp_handshake_second(gatts_if,
+                                        prepare_write_env->prepare_buf,
+                                        prepare_write_env->prepare_len,
+                                        param->write.conn_id);
         }
         else if (led_button_handle_table[IDX_CHAR_LED_VAL] == prepare_write_env->handle)
         {

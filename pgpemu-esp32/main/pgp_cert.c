@@ -45,7 +45,11 @@ void aes_setkey(AES_Context *ctx, const uint8_t *key)
 
 uint8_t flash_data[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-void hexdump(const char *msg, const uint8_t *data, int len)
+#ifdef ESP_PLATFORM
+static
+#endif
+	void
+	hexdump(const char *msg, const uint8_t *data, int len)
 {
 #ifdef ESP_PLATFORM
 	if (esp_log_level_get(CERT_TAG) >= ESP_LOG_DEBUG)
@@ -175,12 +179,12 @@ void aes_ctr(AES_Context *ctx, const uint8_t *nonce,
 	}
 }
 
-void generate_nonce(uint8_t *nonce)
+void randomize_buffer(uint8_t *buf, size_t len)
 {
-	for (int i = 0; i < 16; i++)
+	for (int i = 0; i < len; i++)
 	{
 		// random quality is not important
-		nonce[i] = GEN_RANDOM() & 0xff;
+		buf[i] = GEN_RANDOM() & 0xff;
 	}
 }
 

@@ -1,12 +1,5 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/timers.h"
-
 #include "esp_system.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
-
-#include "pgpemu.h"
 
 #include "config_secrets.h"
 #include "config_storage.h"
@@ -27,15 +20,6 @@ void app_main()
 
     // uart menu
     init_uart();
-
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
 
     // init nvs storage
     init_config_storage();
@@ -72,7 +56,11 @@ void app_main()
     }
 
     // start autobutton task
-    xTaskCreate(auto_button_task, "auto_button_task", 2048, NULL, 11, NULL);
+    if (!init_autobutton())
+    {
+        ESP_LOGI(PGPEMU_TAG, "creating button task failed");
+        return;
+    }
 
     // set clone mac and start bluetooth
     if (!init_bluetooth())

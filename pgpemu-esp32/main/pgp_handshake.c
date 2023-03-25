@@ -11,12 +11,15 @@
 #include "pgp_cert.h"
 #include "pgp_gatts.h"
 
-uint8_t session_key[16];
-// TODO this should be saved per connection
-int cert_state = 0;
+static uint8_t session_key[16];
 
-void generate_first_challenge()
+// TODO this should be saved per connection
+static int cert_state = 0;
+
+static void generate_first_challenge()
 {
+    // TODO these values should probably randomized
+
     // fill in cert_buffer
     uint8_t the_challenge[16];
     memset(the_challenge, 0x41, 16);
@@ -31,13 +34,52 @@ void generate_first_challenge()
                     (struct challenge_data *)cert_buffer);
 }
 
-void handle_pgp_handshake(esp_gatt_if_t gatts_if,
-                          const uint8_t *prepare_buf, int datalen,
-                          int conn_id)
+void handle_pgp_handshake_first(esp_gatt_if_t gatts_if, uint16_t descr_value,
+                                uint8_t *cert_buffer, int cert_buffer_len,
+                                int conn_id)
+{
+    assert(cert_buffer_len == 378);
+
+    if (descr_value == 0x0001)
+    {
+
+        uint8_t notify_data[4];
+        memset(notify_data, 0, 4);
+
+        if (has_reconnect_key)
+        {
+            memset(cert_buffer, 0, 36);
+            cert_buffer[0] = 3;
+            notify_data[0] = 3;
+
+            memcpy(cert_buffer + 4, reconnect_challenge, 32);
+            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 36, cert_buffer);
+            cert_state = 3;
+        }
+        else
+        {
+            generate_first_challenge();
+            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 378, cert_buffer);
+        }
+
+        ESP_LOGD(HANDSHAKE_TAG, "start CERT PAIRING, notify enable, conn_id=%d", conn_id);
+        // the size of notify_data[] need less than MTU size
+        esp_ble_gatts_send_indicate(gatts_if, conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
+                                    sizeof(notify_data), notify_data, false);
+    }
+    else if (descr_value == 0x000)
+    {
+        ESP_LOGD(HANDSHAKE_TAG, "notify disable, conn_id=%d", conn_id);
+    }
+}
+
+void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
+                                 const uint8_t *prepare_buf, int datalen,
+                                 int conn_id)
 {
     if (cert_state >= 1)
     {
-        ESP_LOGD(HANDSHAKE_TAG, "Cert state %d, received %d", cert_state, datalen);
+        ESP_LOGD(HANDSHAKE_TAG, "Handshake state=%d, received %d b, conn_id=%d", cert_state, datalen, conn_id);
     }
 
     switch (cert_state)
@@ -119,7 +161,8 @@ void handle_pgp_handshake(esp_gatt_if_t gatts_if,
         }
 
         has_reconnect_key = 1;
-        // should be random, but this is easier for debugging
+
+        // TODO should be random, but this is easier for debugging
         memset(reconnect_challenge, 0x46, 32);
 
         uint8_t notify_data[4] = {0x04, 0x00, 0x23, 0x00};
@@ -191,4 +234,14 @@ void handle_pgp_handshake(esp_gatt_if_t gatts_if,
         ESP_LOGE(HANDSHAKE_TAG, "Unhandled state: %d", cert_state);
         break;
     }
+}
+
+void pgp_handshake_disconnect(int conn_id)
+{
+    cert_state = 0;
+}
+
+int pgp_get_handshake_state(int conn_id)
+{
+    return cert_state;
 }

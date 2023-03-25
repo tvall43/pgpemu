@@ -4,14 +4,14 @@
 
 #include "pgp_gatts.h"
 
-const char *battery_char_names[] = {
+static const char *battery_char_names[] = {
     "BATTERY_SVC",
     "CHAR_BATTERY_LEVEL",
     "CHAR_BATTERY_LEVEL_VAL",
     "CHAR_BATTERY_LEVEL_CFG",
 };
 
-const char *led_button_char_names[] = {
+static const char *led_button_char_names[] = {
     "LED_BUTTON_SVC",
     "CHAR_LED",
     "CHAR_LED_VAL",
@@ -25,7 +25,7 @@ const char *led_button_char_names[] = {
     "CHAR_FW_VERSION",
     "CHAR_FW_VERSION_VAL"};
 
-const char *cert_char_names[] = {
+static const char *cert_char_names[] = {
     "CERT_SVC",
     "CHAR_CENTRAL_TO_SFIDA",
     "CHAR_CENTRAL_TO_SFIDA_VAL",
@@ -35,7 +35,7 @@ const char *cert_char_names[] = {
     "CHAR_SFIDA_TO_CENTRAL",
     "CHAR_SFIDA_TO_CENTRAL_VAL"};
 
-const char *UNKNOWN_HANDLE_NAME = "<UNKNOWN HANDLE NAME>";
+static const char *UNKNOWN_HANDLE_NAME = "<UNKNOWN HANDLE NAME>";
 
 static int find_handle_index(uint16_t handle, uint16_t *handle_table, int count)
 {

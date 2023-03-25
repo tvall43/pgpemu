@@ -17,7 +17,7 @@
 static const uint16_t ESP_APP_ID = 0x55;
 
 // in ESP32, bt_mac is base_mac + 2
-uint8_t mac[6];
+static uint8_t mac[6];
 uint8_t bt_mac[6];
 
 bool init_bluetooth()

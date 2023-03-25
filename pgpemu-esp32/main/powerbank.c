@@ -18,7 +18,8 @@ void init_powerbank()
 static void powerbank_task(void *pvParameters)
 {
     TickType_t previousWakeTime = xTaskGetTickCount();
-    ESP_LOGI(POWERBANK_TASK_TAG, "[powerbank task start]");
+    
+    ESP_LOGI(POWERBANK_TASK_TAG, "task start");
 
     // to avoid spamming early boot log
     vTaskDelayUntil(&previousWakeTime, 2000 / portTICK_PERIOD_MS);

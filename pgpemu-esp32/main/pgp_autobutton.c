@@ -14,18 +14,27 @@
 
 QueueHandle_t button_queue;
 
-void auto_button_task(void *pvParameters)
+static void autobutton_task(void *pvParameters);
+
+bool init_autobutton()
 {
-    button_queue_item_t item;
-
-    ESP_LOGI(BUTTON_TASK_TAG, "[button task start]");
-
     button_queue = xQueueCreate(10, sizeof(button_queue_item_t));
     if (button_queue == 0)
     {
         ESP_LOGE(BUTTON_TASK_TAG, "%s creating button queue failed", __func__);
-        return;
+        return false;
     }
+
+    xTaskCreate(autobutton_task, "autobutton_task", 2048, NULL, 11, NULL);
+
+    return true;
+}
+
+static void autobutton_task(void *pvParameters)
+{
+    button_queue_item_t item;
+
+    ESP_LOGI(BUTTON_TASK_TAG, "task start");
 
     while (1)
     {

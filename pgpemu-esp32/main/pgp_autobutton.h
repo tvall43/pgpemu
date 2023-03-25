@@ -17,6 +17,6 @@ typedef struct
 
 extern QueueHandle_t button_queue;
 
-void auto_button_task(void *pvParameters);
+bool init_autobutton();
 
 #endif /* PGP_AUTOBUTTON_H */

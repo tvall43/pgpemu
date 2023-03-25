@@ -9,15 +9,14 @@
 #include "config_secrets.h"
 #include "config_storage.h"
 #include "log_tags.h"
-#include "pgpemu.h"
 #include "pgp_gap.h"
 #include "pgp_gatts.h"
 #include "secrets.h"
 #include "settings.h"
 
-#define EX_UART_NUM UART_NUM_0
-#define BUF_SIZE 1024
-#define RD_BUF_SIZE BUF_SIZE
+static const uart_port_t EX_UART_NUM = UART_NUM_0;
+static const int BUF_SIZE = 1024;
+static const int RD_BUF_SIZE = BUF_SIZE;
 static QueueHandle_t uart0_queue;
 
 // scratchpad for reading/writing to nvs
@@ -29,7 +28,7 @@ static uint8_t tmp_blob[sizeof(PGP_BLOB)];
 static void uart_event_task(void *pvParameters);
 static void uart_secrets_handler();
 static bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes);
-void uart_restart_command();
+static void uart_restart_command();
 
 void init_uart()
 {

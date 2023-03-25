@@ -20,7 +20,19 @@ static nvs_handle_t user_settings_handle;
 
 void init_config_storage()
 {
-    esp_err_t err = nvs_open("user_settings", NVS_READWRITE, &user_settings_handle);
+    esp_err_t err;
+
+    // initialize NVS
+    err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    // open config partition
+    err = nvs_open("user_settings", NVS_READWRITE, &user_settings_handle);
     ESP_ERROR_CHECK(err);
 }
 
