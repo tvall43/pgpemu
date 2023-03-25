@@ -16,9 +16,10 @@
 
 #include "pgpemu.h"
 
+#include "config_secrets.h"
 #include "config_storage.h"
 #include "log_tags.h"
-#include "pgp-cert.h"
+#include "pgp_cert.h"
 #include "powerbank.h"
 #include "secrets.h"
 #include "settings.h"
@@ -1245,7 +1246,19 @@ void app_main()
     // restore saved settings from nvs
     read_stored_settings(false);
 
+    // make sure we're not turned off
     init_powerbank();
+
+    // read secrets from nvs (settings are safe to use because mutex is still locked)
+    read_secrets_id(settings.chosen_device, PGP_CLONE_NAME, PGP_MAC, PGP_DEVICE_KEY, PGP_BLOB);
+
+    if (!PGP_VALID())
+    {
+        // release mutex
+        settings_ready();
+        ESP_LOGE(PGPEMU_TAG, "NO PGP SECRETS AVAILABLE IN SLOT %d! Set them using secrets_upload.py or chose another using the 'X' menu!", settings.chosen_device);
+        return;
+    }
 
     // Init queues
     button_queue = xQueueCreate(10, sizeof(button_queue_item_t));
@@ -1265,8 +1278,8 @@ void app_main()
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
-    memcpy(bt_mac, MAC, 6);
-    memcpy(mac, MAC, 6);
+    memcpy(bt_mac, PGP_MAC, 6);
+    memcpy(mac, PGP_MAC, 6);
 
     mac[5] -= 2; // TODO: check what happens if last byte is 0 or 1
 

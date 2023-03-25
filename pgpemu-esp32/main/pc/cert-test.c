@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../pgp-cert.h"
+#include "../pgp_cert.h"
 #include "../secrets.h"
 
 // length must be 378 bytes
@@ -50,7 +50,7 @@ void test_decrypt_chal_0(const uint8_t *indata)
 
 	hexdump("Enc hash: \n", challenge->encrypted_hash, 16);
 
-	aes_setkey(&ctx, DEVICE_KEY);
+	aes_setkey(&ctx, PGP_DEVICE_KEY);
 
 	aes_ctr(&ctx, challenge->nonce,
 			challenge->encrypted_main_challenge,

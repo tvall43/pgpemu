@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "pgp-cert.h"
+#include "pgp_cert.h"
 #include "secrets.h"
 
 #ifdef ESP_PLATFORM
@@ -211,9 +211,9 @@ void generate_chal_0(const uint8_t *mac,
 	memset(output->state, 0, 4);
 	memcpy(output->nonce, outer_nonce, 16);
 	memcpy(output->bt_addr, revmac, 6);
-	memcpy(output->blob, BLOB, 256);
+	memcpy(output->blob, PGP_BLOB, 256);
 
-	aes_setkey(&ctx, DEVICE_KEY);
+	aes_setkey(&ctx, PGP_DEVICE_KEY);
 	aes_hash(&ctx, output->nonce, (uint8_t *)&main_data, 80, tmp_hash);
 	encrypt_block(&ctx, tmp_hash, output->nonce, output->encrypted_hash);
 	aes_ctr(&ctx, output->nonce, (uint8_t *)&main_data, 80,

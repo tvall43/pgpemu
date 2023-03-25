@@ -6,8 +6,17 @@
 
 typedef struct
 {
+    // any read/write must lock this
     SemaphoreHandle_t mutex;
-    bool autocatch, autospin, powerbank_ping;
+
+    // set which PGP device presets stored in NVS should be cloned
+    uint8_t chosen_device;
+
+    // gotcha functions
+    bool autocatch, autospin;
+    
+    // waste a bit of power to keep your powerbank from turning us off
+    bool powerbank_ping;
 } Settings;
 
 extern Settings settings;
@@ -16,5 +25,6 @@ void init_settings();
 void settings_ready();
 bool toggle_setting(bool *var);
 bool get_setting(bool *var);
+bool set_chosen_device(uint8_t id);
 
 #endif /* SETTINGS_H */

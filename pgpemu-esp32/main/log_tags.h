@@ -1,6 +1,7 @@
 #ifndef LOG_TAGS_H
 #define LOG_TAGS_H
 
+static const char CONFIG_SECRETS_TAG[] = "config_secrets";
 static const char CONFIG_STORAGE_TAG[] = "config_storage";
 static const char UART_TAG[] = "uart_events";
 static const char BT_TAG[] = "pgp_bluetooth";

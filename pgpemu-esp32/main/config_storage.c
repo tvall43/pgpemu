@@ -1,6 +1,8 @@
 #include "config_storage.h"
 
+#include "config_secrets.h"
 #include "log_tags.h"
+#include "nvs_helper.h"
 #include "settings.h"
 
 #include "esp_log.h"
@@ -11,11 +13,9 @@
 static const char KEY_AUTOCATCH[] = "catch";
 static const char KEY_AUTOSPIN[] = "spin";
 static const char KEY_POWERBANK_PING[] = "ping";
+static const char KEY_CHOSEN_DEVICE[] = "device";
 
 static nvs_handle_t user_settings_handle;
-
-static bool nvs_read_check(esp_err_t err, const char *name);
-static bool nvs_write_check(esp_err_t err, const char *name);
 
 void init_config_storage()
 {
@@ -28,6 +28,7 @@ void read_stored_settings(bool use_mutex)
 {
     esp_err_t err;
     int8_t autocatch = 0, autospin = 0, powerbank_ping = 0;
+    uint8_t chosen_device = 0;
 
     if (use_mutex)
     {
@@ -40,19 +41,33 @@ void read_stored_settings(bool use_mutex)
 
     // read bool settings
     err = nvs_get_i8(user_settings_handle, KEY_AUTOCATCH, &autocatch);
-    if (nvs_read_check(err, KEY_AUTOCATCH))
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_AUTOCATCH))
     {
         settings.autocatch = (bool)autocatch;
     }
     err = nvs_get_i8(user_settings_handle, KEY_AUTOSPIN, &autospin);
-    if (nvs_read_check(err, KEY_AUTOSPIN))
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_AUTOSPIN))
     {
         settings.autospin = (bool)autospin;
     }
     err = nvs_get_i8(user_settings_handle, KEY_POWERBANK_PING, &powerbank_ping);
-    if (nvs_read_check(err, KEY_POWERBANK_PING))
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING))
     {
         settings.powerbank_ping = (bool)powerbank_ping;
+    }
+
+    // read uint8_t settings
+    err = nvs_get_u8(user_settings_handle, KEY_CHOSEN_DEVICE, &chosen_device);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_CHOSEN_DEVICE))
+    {
+        if (is_valid_secrets_id(chosen_device))
+        {
+            settings.chosen_device = chosen_device;
+        }
+        else
+        {
+            ESP_LOGE(CONFIG_STORAGE_TAG, "invalid chosen device %d", chosen_device);
+        }
     }
 
     if (use_mutex)
@@ -60,7 +75,7 @@ void read_stored_settings(bool use_mutex)
         xSemaphoreGive(settings.mutex);
     }
 
-    ESP_LOGI(CONFIG_STORAGE_TAG, "settings read from nvs");
+    ESP_LOGI(CONFIG_STORAGE_TAG, "user settings read from nvs");
 }
 
 bool write_config_storage()
@@ -74,12 +89,17 @@ bool write_config_storage()
 
     bool all_ok = true;
 
+    // bools
     err = nvs_set_i8(user_settings_handle, KEY_AUTOCATCH, settings.autocatch);
-    all_ok = all_ok && nvs_write_check(err, KEY_AUTOCATCH);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_AUTOCATCH);
     err = nvs_set_i8(user_settings_handle, KEY_AUTOSPIN, settings.autospin);
-    all_ok = all_ok && nvs_write_check(err, KEY_AUTOSPIN);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_AUTOSPIN);
     err = nvs_set_i8(user_settings_handle, KEY_POWERBANK_PING, settings.powerbank_ping);
-    all_ok = all_ok && nvs_write_check(err, KEY_POWERBANK_PING);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING);
+
+    // uint8s
+    err = nvs_set_u8(user_settings_handle, KEY_CHOSEN_DEVICE, settings.chosen_device);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_CHOSEN_DEVICE);
 
     // give it back in any of the following cases
     xSemaphoreGive(settings.mutex);
@@ -97,33 +117,4 @@ bool write_config_storage()
 void close_config_storage()
 {
     nvs_close(user_settings_handle);
-}
-
-static bool nvs_read_check(esp_err_t err, const char *name)
-{
-    switch (err)
-    {
-    case ESP_OK:
-        return true;
-    case ESP_ERR_NVS_NOT_FOUND:
-        ESP_LOGW(CONFIG_STORAGE_TAG, "nvs value %s is not initialized yet!", name);
-        break;
-    default:
-        ESP_LOGE(CONFIG_STORAGE_TAG, "nvs error reading %s: %s", name, esp_err_to_name(err));
-    }
-
-    return false;
-}
-
-static bool nvs_write_check(esp_err_t err, const char *name)
-{
-    switch (err)
-    {
-    case ESP_OK:
-        return true;
-    default:
-        ESP_LOGE(CONFIG_STORAGE_TAG, "nvs error writing %s: %s", name, esp_err_to_name(err));
-    }
-
-    return false;
 }
