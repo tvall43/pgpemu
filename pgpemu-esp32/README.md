@@ -20,6 +20,7 @@ From VSCode's Command Palette run "ESP-IDF: Add vscode configuration folder" [as
 ## Credits
 
 - <https://github.com/yohanes/pgpemu> - Original PGPEMU implementation
+- <https://github.com/gameofyou/pgpemu> - Fork with display
 
 ## References
 

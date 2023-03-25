@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 // Battery service
 enum
 {
@@ -47,4 +50,9 @@ enum
   CERT_LAST_IDX
 };
 
-#endif
+extern TickType_t connectionStart;
+extern TickType_t connectionEnd;
+
+void pgp_advertise();
+
+#endif /* PGPEMU_H */

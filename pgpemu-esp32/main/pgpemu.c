@@ -1,35 +1,28 @@
-#include <atomic>
-#include <string>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "freertos/timers.h"
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
-#include "driver/uart.h"
-
-#define EX_UART_NUM UART_NUM_0
 
 #include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_bt.h"
-
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
-#include "esp_bt_main.h"
-#include "pgpemu.h"
-#include "pgp-cert.h"
-#include "secrets.h"
 #include "esp_gatt_common_api.h"
+#include "esp_bt_main.h"
 
-static constexpr char UART_TAG[] = "uart_events";
-static constexpr char BT_TAG[] = "pgp_bluetooth";
-static constexpr char CERT_TAG[] = "pgp_cert";
-static constexpr char PGPEMU_TAG[] = "PGPEMU";
-static constexpr char BUTTON_TASK_TAG[] = "button_task";
+#include "pgpemu.h"
 
-std::atomic<bool> setting_autocatch{true}, setting_autospin{true};
+#include "config_storage.h"
+#include "log_tags.h"
+#include "pgp-cert.h"
+#include "powerbank.h"
+#include "secrets.h"
+#include "settings.h"
+#include "uart.h"
 
 #define PROFILE_NUM 1
 #define PROFILE_APP_IDX 0
@@ -58,15 +51,12 @@ std::atomic<bool> setting_autocatch{true}, setting_autospin{true};
 #define SCAN_RSP_CONFIG_FLAG (1 << 1)
 
 static uint8_t adv_config_done = 0;
-static TickType_t connectionStart = 0;
-static TickType_t connectionEnd = 0;
+TickType_t connectionStart = 0;
+TickType_t connectionEnd = 0;
 
 uint16_t battery_handle_table[BATTERY_LAST_IDX];
 uint16_t led_button_handle_table[LED_BUTTON_LAST_IDX];
 uint16_t certificate_handle_table[CERT_LAST_IDX];
-
-uint16_t last_conn_id = 0;
-esp_gatt_if_t last_if = 0;
 
 // in ESP32, bt_mac is base_mac + 2
 uint8_t mac[6];
@@ -82,9 +72,19 @@ typedef struct
     int prepare_len;
 } prepare_type_env_t;
 
+static prepare_type_env_t prepare_write_env;
+
 static QueueHandle_t button_queue;
 
-static prepare_type_env_t prepare_write_env;
+typedef struct
+{
+    // which session does this belong to
+    esp_gatt_if_t gatts_if;
+    uint16_t conn_id;
+
+    // delay after which button is pressed
+    int delay;
+} button_queue_item_t;
 
 static uint8_t raw_adv_data[] = {
     /* flags */
@@ -138,13 +138,9 @@ static struct gatts_profile_inst pgp_profile_tab[PROFILE_NUM] = {
         .gatts_if = ESP_GATT_IF_NONE, /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
         .app_id = 0,
         .conn_id = 0,
-        .service_id{},
         .service_handle = 0,
-        .char_handle{},
-        .perm = 0,
-        .property = 0,
-        .descr_handle{},
-        .descr_uuid{},
+        .char_handle = 0,
+        .descr_handle = 0,
     },
 };
 
@@ -348,6 +344,11 @@ static void generate_first_challenge()
     memset(outer_nonce, 0x44, 16);
     generate_chal_0(bt_mac, the_challenge, main_nonce, session_key, outer_nonce,
                     (struct challenge_data *)cert_buffer);
+}
+
+void pgp_advertise()
+{
+    esp_ble_gap_start_advertising(&adv_params);
 }
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -629,7 +630,7 @@ void handle_protocol(esp_gatt_if_t gatts_if,
     }
 }
 
-void handle_led_notify_from_app(const uint8_t *buffer)
+void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const uint8_t *buffer)
 {
     int number_of_patterns = buffer[3] & 0x1f;
     int priority = (buffer[3] >> 5) & 0x7;
@@ -743,7 +744,7 @@ void handle_led_notify_from_app(const uint8_t *buffer)
     {
         // blinking green
         ESP_LOGI(PGPEMU_TAG, "Pokemon in range!");
-        if (setting_autocatch)
+        if (get_setting(&settings.autocatch))
         {
             press_button = true;
         }
@@ -758,7 +759,7 @@ void handle_led_notify_from_app(const uint8_t *buffer)
     {
         // blinking blue
         ESP_LOGI(PGPEMU_TAG, "Pokestop in range!");
-        if (setting_autospin)
+        if (get_setting(&settings.autospin))
         {
             press_button = true;
         }
@@ -785,7 +786,7 @@ void handle_led_notify_from_app(const uint8_t *buffer)
     }
     else
     {
-        if (setting_autospin || setting_autocatch)
+        if (get_setting(&settings.autospin) || get_setting(&settings.autocatch))
         {
             ESP_LOGW(PGPEMU_TAG, "Unhandled Color pattern, pushing button in any case");
             press_button = true;
@@ -798,8 +799,20 @@ void handle_led_notify_from_app(const uint8_t *buffer)
 
     if (press_button)
     {
-        ESP_LOGI(PGPEMU_TAG, "Sending push button");
-        xQueueSend(button_queue, &pattern_duration, portMAX_DELAY);
+        int pattern_ms = pattern_duration * 50;
+
+        // random button press delay between 1000 and 2500 ms
+        int delay = 1000 + esp_random() % 1501;
+        if (delay < pattern_ms)
+        {
+            ESP_LOGI(PGPEMU_TAG, "queueing push button after %d ms, conn_id = %d", delay, conn_id);
+
+            button_queue_item_t item;
+            item.gatts_if = gatts_if;
+            item.conn_id = conn_id;
+            item.delay = delay;
+            xQueueSend(button_queue, &item, portMAX_DELAY);
+        }
     }
 
     // currently all things which require button interaction are 30 s long.
@@ -829,7 +842,7 @@ void pgp_exec_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepar
         }
         else if (led_button_handle_table[IDX_CHAR_LED_VAL] == prepare_write_env->handle)
         {
-            handle_led_notify_from_app(prepare_write_env->prepare_buf);
+            handle_led_notify_from_app(gatts_if, param->write.conn_id, prepare_write_env->prepare_buf);
         }
     }
     else
@@ -963,7 +976,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             }
             else if (led_button_handle_table[IDX_CHAR_LED_VAL] == param->write.handle)
             {
-                handle_led_notify_from_app(param->write.value);
+                handle_led_notify_from_app(gatts_if, param->write.conn_id, param->write.value);
                 return;
             }
             else if (led_button_handle_table[IDX_CHAR_BUTTON_CFG] == param->write.handle)
@@ -1029,7 +1042,6 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         }
 
         esp_ble_conn_update_params_t conn_params = {
-            .bda{},
             .min_int = 0,
             .max_int = 0,
             .latency = 0,
@@ -1043,8 +1055,6 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         conn_params.timeout = 400;  // timeout = 400*10ms = 4000ms
         // start sent the update connection parameters to the peer device.
         esp_ble_gap_update_conn_params(&conn_params);
-        last_conn_id = param->write.conn_id;
-        last_if = gatts_if;
 
         esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
 
@@ -1161,14 +1171,14 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 
 static void auto_button_task(void *pvParameters)
 {
-    ESP_LOGI("BUTTON", "[button task start]");
+    button_queue_item_t item;
+
+    ESP_LOGI(BUTTON_TASK_TAG, "[button task start]");
+
     while (1)
     {
-        int pattern_duration = 0;
-        if (xQueueReceive(button_queue, &pattern_duration, portMAX_DELAY))
+        if (xQueueReceive(button_queue, &item, portMAX_DELAY))
         {
-            int pattern_ms = pattern_duration * 50;
-
             // according to u/EeveesGalore's docs (https://i.imgur.com/7oWjMNu.png) button is sampled every 50 ms
             // byte 0 = samples0,1 (2=LSBit)
             // byte 1 = samples2-9 (10=LSBit)
@@ -1190,181 +1200,24 @@ static void auto_button_task(void *pvParameters)
             }
             button_pattern &= 0x03ff; // just to be safe
 
-            if (button_pattern == 0)
-            {
-                ESP_LOGE(BUTTON_TASK_TAG, "my button logic is faulty");
-                button_pattern = 0x03ff;
-            }
-
             // make little endian byte array for sending
             uint8_t notify_data[2] = {
                 (button_pattern >> 8) & 0x03,
                 button_pattern & 0xff};
 
-            // random button press delay between 1000 and 2500 ms
-            int delay = 1000 + esp_random() % 1501;
-            if (delay < pattern_ms)
-            {
-                ESP_LOGI(BUTTON_TASK_TAG, "pressing button after %d ms for %d ms", delay, press_duration * 50);
-                vTaskDelay(delay / portTICK_PERIOD_MS);
+            ESP_LOGI(BUTTON_TASK_TAG, "pressing button after %d ms for %d ms, conn_id = %d", item.delay, press_duration * 50, item.conn_id);
+            vTaskDelay(item.delay / portTICK_PERIOD_MS);
 
-                esp_ble_gatts_send_indicate(last_if,
-                                            last_conn_id,
-                                            led_button_handle_table[IDX_CHAR_BUTTON_VAL],
-                                            sizeof(notify_data), notify_data, false);
-            }
-            else
-            {
-                ESP_LOGW(BUTTON_TASK_TAG, "not pressing button. delay %d ms >= pattern duration %d ms", delay, pattern_ms);
-            }
+            esp_ble_gatts_send_indicate(item.gatts_if,
+                                        item.conn_id,
+                                        led_button_handle_table[IDX_CHAR_BUTTON_VAL],
+                                        sizeof(notify_data), notify_data, false);
         }
     }
-}
-
-#define BUF_SIZE 1024
-#define RD_BUF_SIZE BUF_SIZE
-static QueueHandle_t uart0_queue;
-
-static void uart_event_task(void *pvParameters)
-{
-    uart_event_t event;
-
-    uint8_t *dtmp = (uint8_t *)malloc(RD_BUF_SIZE);
-    for (;;)
-    {
-        // Waiting for UART event.
-        if (xQueueReceive(uart0_queue, (void *)&event, portMAX_DELAY))
-        {
-            bzero(dtmp, RD_BUF_SIZE);
-            ESP_LOGD(UART_TAG, "uart[%d] event:", EX_UART_NUM);
-
-            switch (event.type)
-            {
-            // Event of UART receving data
-            /*We'd better handler data event fast, there would be much more data events than
-            other types of events. If we take too much time on data event, the queue might
-            be full.*/
-            case UART_DATA:
-                ESP_LOGD(UART_TAG, "[UART DATA]: %d bytes", event.size);
-                uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-
-                if (dtmp[0] == 'q')
-                {
-                    ESP_LOGI(UART_TAG, "[push button]");
-                    uint8_t notify_data[2];
-                    notify_data[0] = 0x03;
-                    notify_data[1] = 0xff;
-
-                    esp_ble_gatts_send_indicate(last_if, last_conn_id, led_button_handle_table[IDX_CHAR_BUTTON_VAL],
-                                                sizeof(notify_data), notify_data, false);
-                }
-                else if (dtmp[0] == 'w')
-                {
-                    ESP_LOGI(UART_TAG, "[unpush button]");
-                    uint8_t notify_data[2];
-                    notify_data[0] = 0x00;
-                    notify_data[1] = 0x00;
-
-                    esp_ble_gatts_send_indicate(last_if, last_conn_id, led_button_handle_table[IDX_CHAR_BUTTON_VAL],
-                                                sizeof(notify_data), notify_data, false);
-                }
-                else if (dtmp[0] == 't')
-                {
-                    TickType_t now = xTaskGetTickCount();
-                    if (connectionStart != 0)
-                    {
-                        ESP_LOGI(UART_TAG, "connected for %d ms", pdTICKS_TO_MS(now - connectionStart));
-                    }
-                    else if (connectionEnd != 0)
-                    {
-                        ESP_LOGI(UART_TAG, "disconnected for %d ms", pdTICKS_TO_MS(now - connectionEnd));
-                    }
-                    else
-                    {
-                        ESP_LOGI(UART_TAG, "no connection yet");
-                    }
-                }
-                else if (dtmp[0] == 's')
-                {
-                    setting_autospin = !setting_autospin;
-                    ESP_LOGI(UART_TAG, "autospin %s", setting_autospin ? "on" : "off");
-                }
-                else if (dtmp[0] == 'c')
-                {
-                    setting_autocatch = !setting_autocatch;
-                    ESP_LOGI(UART_TAG, "autocatch %s", setting_autocatch ? "on" : "off");
-                }
-                else if (dtmp[0] == 'h' || dtmp[0] == '?')
-                {
-                    std::string cmds[][2] = {
-                        {"h,?", "help"},
-                        {"s", "autospin"},
-                        {"c", "autocatch"},
-                    };
-
-                    ESP_LOGI(UART_TAG, "Commands:");
-                    for (auto &cmd : cmds)
-                    {
-                        ESP_LOGI(UART_TAG, "- %s - %s", cmd[0].c_str(), cmd[1].c_str());
-                    }
-                }
-
-                break;
-            // Event of HW FIFO overflow detected
-            case UART_FIFO_OVF:
-                ESP_LOGW(UART_TAG, "hw fifo overflow");
-                // If fifo overflow happened, you should consider adding flow control for your application.
-                // The ISR has already reset the rx FIFO,
-                // As an example, we directly flush the rx buffer here in order to read more data.
-                uart_flush_input(EX_UART_NUM);
-                xQueueReset(uart0_queue);
-                break;
-            // Event of UART ring buffer full
-            case UART_BUFFER_FULL:
-                ESP_LOGW(UART_TAG, "ring buffer full");
-                // If buffer full happened, you should consider encreasing your buffer size
-                // As an example, we directly flush the rx buffer here in order to read more data.
-                uart_flush_input(EX_UART_NUM);
-                xQueueReset(uart0_queue);
-                break;
-            // Event of UART RX break detected
-            case UART_BREAK:
-                ESP_LOGI(UART_TAG, "uart rx break");
-                break;
-            // Event of UART parity check error
-            case UART_PARITY_ERR:
-                ESP_LOGI(UART_TAG, "uart parity error");
-                break;
-            // Event of UART frame error
-            case UART_FRAME_ERR:
-                ESP_LOGI(UART_TAG, "uart frame error");
-                break;
-            // Others
-            default:
-                ESP_LOGI(UART_TAG, "uart event type: %d", event.type);
-                break;
-            }
-        }
-    }
-
-    free(dtmp);
-    dtmp = NULL;
-    vTaskDelete(NULL);
 }
 
 void app_main()
 {
-    esp_err_t ret;
-
-    // Initialize NVS
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
     // configure log levels
     esp_log_level_set(UART_TAG, ESP_LOG_INFO);
     esp_log_level_set(BT_TAG, ESP_LOG_DEBUG);
@@ -1372,26 +1225,30 @@ void app_main()
     esp_log_level_set(PGPEMU_TAG, ESP_LOG_DEBUG);
     esp_log_level_set(BUTTON_TASK_TAG, ESP_LOG_DEBUG);
 
-    /* Configure parameters of an UART driver,
-     * communication pins and install the driver */
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .rx_flow_ctrl_thresh = 0,
-        .use_ref_tick = 0};
+    // uart menu
+    init_uart();
 
-    uart_param_config(EX_UART_NUM, &uart_config);
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
-    // Set UART pins (using UART0 default pins ie no changes.)
-    uart_set_pin(EX_UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    // Install UART driver, and get the queue.
-    uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart0_queue, 0);
+    // init nvs storage
+    init_config_storage();
+
+    // init settings mutex
+    init_settings();
+    // restore saved settings from nvs
+    read_stored_settings(false);
+
+    init_powerbank();
 
     // Init queues
-    button_queue = xQueueCreate(10, sizeof(int));
+    button_queue = xQueueCreate(10, sizeof(button_queue_item_t));
     if (button_queue == 0)
     {
         ESP_LOGE(PGPEMU_TAG, "%s creating button queue failed", __func__);
@@ -1403,9 +1260,6 @@ void app_main()
         ESP_LOGD(CERT_TAG, "cert buffer:");
         ESP_LOG_BUFFER_HEX(CERT_TAG, cert_buffer, sizeof(cert_buffer));
     }
-
-    // Create a task to handler UART event from ISR
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
 
     xTaskCreate(auto_button_task, "auto_button_task", 2048, NULL, 11, NULL);
 
@@ -1492,4 +1346,6 @@ void app_main()
 
     ESP_LOGI(PGPEMU_TAG, "Device: %s", PGP_CLONE_NAME);
     ESP_LOGI(PGPEMU_TAG, "Ready.");
+
+    settings_ready();
 }
