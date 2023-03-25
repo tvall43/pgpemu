@@ -11,6 +11,8 @@
 #include <aes/esp_aes.h>
 #include <esp_log.h>
 
+#include "log_tags.h"
+
 void pgp_aes_encrypt(AES_Context *ctx, const uint8_t *inp, uint8_t *out)
 {
 	esp_aes_crypt_ecb(ctx, ESP_AES_ENCRYPT, inp, out);
@@ -46,8 +48,11 @@ uint8_t flash_data[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 void hexdump(const char *msg, const uint8_t *data, int len)
 {
 #ifdef ESP_PLATFORM
-	ESP_LOGI("PGPEMU", "%s", msg);
-	esp_log_buffer_hex("PGPEMU", data, len);
+	if (esp_log_level_get(CERT_TAG) >= ESP_LOG_DEBUG)
+	{
+		ESP_LOGD(CERT_TAG, "%s", msg);
+		ESP_LOG_BUFFER_HEX(CERT_TAG, data, len);
+	}
 #else
 	if (msg)
 	{
@@ -260,7 +265,7 @@ int decrypt_next(const uint8_t *data, const uint8_t *key, uint8_t *output)
 	memset(enc_nonce, 0, 16);
 	encrypt_block(&ctx, chal->encrypted_hash, chal->nonce, enc_nonce);
 
-	hexdump("Enc nonce :", enc_nonce, 16);
+	hexdump("Enc nonce:", enc_nonce, 16);
 
 	uint8_t hash_1[16];
 	memset(hash_1, 0, 16);

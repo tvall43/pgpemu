@@ -17,6 +17,9 @@ typedef struct
     
     // waste a bit of power to keep your powerbank from turning us off
     bool powerbank_ping;
+
+    // verbose log messages
+    bool verbose;
 } Settings;
 
 extern Settings settings;

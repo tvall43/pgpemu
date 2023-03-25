@@ -14,6 +14,7 @@ static const char KEY_AUTOCATCH[] = "catch";
 static const char KEY_AUTOSPIN[] = "spin";
 static const char KEY_POWERBANK_PING[] = "ping";
 static const char KEY_CHOSEN_DEVICE[] = "device";
+static const char KEY_VERBOSE[] = "verbose";
 
 static nvs_handle_t user_settings_handle;
 
@@ -27,7 +28,7 @@ void init_config_storage()
 void read_stored_settings(bool use_mutex)
 {
     esp_err_t err;
-    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0;
+    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, verbose = 0;
     uint8_t chosen_device = 0;
 
     if (use_mutex)
@@ -54,6 +55,11 @@ void read_stored_settings(bool use_mutex)
     if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING))
     {
         settings.powerbank_ping = (bool)powerbank_ping;
+    }
+    err = nvs_get_i8(user_settings_handle, KEY_VERBOSE, &verbose);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE))
+    {
+        settings.verbose = (bool)verbose;
     }
 
     // read uint8_t settings
@@ -96,6 +102,8 @@ bool write_config_storage()
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_AUTOSPIN);
     err = nvs_set_i8(user_settings_handle, KEY_POWERBANK_PING, settings.powerbank_ping);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING);
+    err = nvs_set_i8(user_settings_handle, KEY_VERBOSE, settings.verbose);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE);
 
     // uint8s
     err = nvs_set_u8(user_settings_handle, KEY_CHOSEN_DEVICE, settings.chosen_device);

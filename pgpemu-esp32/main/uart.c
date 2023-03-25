@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "mbedtls/base64.h"
@@ -8,6 +10,8 @@
 #include "config_storage.h"
 #include "log_tags.h"
 #include "pgpemu.h"
+#include "pgp_gap.h"
+#include "pgp_gatts.h"
 #include "secrets.h"
 #include "settings.h"
 
@@ -118,6 +122,24 @@ static void uart_event_task(void *pvParameters)
                     }
                     ESP_LOGI(UART_TAG, "powerbank ping %s", get_setting(&settings.powerbank_ping) ? "on" : "off");
                 }
+                else if (dtmp[0] == 'l')
+                {
+                    // toggle verbose logging
+                    if (!toggle_setting(&settings.verbose))
+                    {
+                        ESP_LOGE(UART_TAG, "failed!");
+                    }
+                    bool new_state = get_setting(&settings.verbose);
+                    if (new_state)
+                    {
+                        log_levels_max();
+                    }
+                    else
+                    {
+                        log_levels_min();
+                    }
+                    ESP_LOGI(UART_TAG, "verbose %s", new_state ? "on" : "off");
+                }
                 else if (dtmp[0] == 'A')
                 {
                     ESP_LOGI(UART_TAG, "starting advertising YOLO");
@@ -157,6 +179,7 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(UART_TAG, "- s - toggle PGP autospin");
                     ESP_LOGI(UART_TAG, "- c - toggle PGP autocatch");
                     ESP_LOGI(UART_TAG, "- p - toggle powerbank ping");
+                    ESP_LOGI(UART_TAG, "- l - toggle verbose logging");
                     ESP_LOGI(UART_TAG, "- S - save user settings permanently");
                     ESP_LOGI(UART_TAG, "Commands:");
                     ESP_LOGI(UART_TAG, "- h,? - help");
@@ -311,6 +334,7 @@ void uart_secrets_handler()
             case 'S':
                 // read nvs slot to scratch buffer and get CRC of that
                 if (slot_chosen)
+                {
                     if (read_secrets_id(chosen_slot, tmp_clone_name, tmp_mac, tmp_device_key, tmp_blob))
                     {
                         uint32_t crc = get_secrets_crc32(tmp_mac, tmp_device_key, tmp_blob);
@@ -320,6 +344,7 @@ void uart_secrets_handler()
                     {
                         ESP_LOGE(UART_TAG, "failed reading slot=%d", chosen_slot);
                     }
+                }
                 break;
 
             case '0':

@@ -9,6 +9,7 @@ Settings settings = {
     .autocatch = true,
     .autospin = true,
     .powerbank_ping = false,
+    .verbose = true,
 };
 
 void init_settings()
