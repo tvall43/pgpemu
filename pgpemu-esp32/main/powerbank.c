@@ -18,7 +18,7 @@ void init_powerbank()
 static void powerbank_task(void *pvParameters)
 {
     TickType_t previousWakeTime = xTaskGetTickCount();
-    
+
     ESP_LOGI(POWERBANK_TASK_TAG, "task start");
 
     // to avoid spamming early boot log
@@ -30,7 +30,8 @@ static void powerbank_task(void *pvParameters)
     {
         if (get_setting(&settings.powerbank_ping))
         {
-            if (!wifi_inited) {
+            if (!wifi_inited)
+            {
                 wifi_inited = true;
                 init_wifi();
             }

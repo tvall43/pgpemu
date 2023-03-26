@@ -52,12 +52,4 @@ extern uint16_t battery_handle_table[BATTERY_LAST_IDX];
 extern uint16_t led_button_handle_table[LED_BUTTON_LAST_IDX];
 extern uint16_t certificate_handle_table[CERT_LAST_IDX];
 
-extern uint8_t cert_buffer[378];
-
-extern uint8_t reconnect_challenge[32];
-extern int has_reconnect_key;
-
-extern TickType_t connectionStart;
-extern TickType_t connectionEnd;
-
 #endif /* PGP_GATTS_H */

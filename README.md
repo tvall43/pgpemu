@@ -9,7 +9,7 @@ You need to dump these secrets yourself from your own original device (see [Refe
 
 This fork adds some features:
 
-- connect up to 3 devices simultaneously
+- connect up to 4 different devices simultaneously
 - parse LED patterns to detect Pokemon/Pokestops/bag full/box full/Pokeballs empty/etc. and press button only when needed
 - randomized delay for pressing the button and press duration
 - PGP secrets are stored in [ESP32 NVS](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html) instead of being compiled in
@@ -18,6 +18,7 @@ This fork adds some features:
 - setting: autocatch/autospin on/off
 - setting: periodically turn on WiFi to waste some power so your powerbank doesn't turn off (depends on your powerbank if this works)
 - setting: chose between PGP secrets if you have dumps from multiple PGPs
+- setting: chose target number of client connections (Bluetooth advertising starts again automatically until all clients are connected)
 - store user settings in NVS
 - why not use it together with [a fashionable case](https://www.thingiverse.com/thing:5892225)? :)
 
@@ -61,20 +62,23 @@ make doubly sure that your previously opened serial terminal (e.g. ESP-IDF Monit
 Serial menu:
 
 ```text
-I (61081) uart_events: Device: RedPGP
-I (61081) uart_events: User Settings (lost on restart unless saved):
-I (61091) uart_events: - s - toggle PGP autospin
-I (61091) uart_events: - c - toggle PGP autocatch
-I (61101) uart_events: - p - toggle powerbank ping
-I (61101) uart_events: - l - toggle verbose logging
-I (61111) uart_events: - S - save user settings permanently
-I (61111) uart_events: Commands:
-I (61121) uart_events: - h,? - help
-I (61121) uart_events: - A - start BT advertising again
-I (61131) uart_events: - X - edit secrets (select eg. slot 2 with 'X2!')
-I (61131) uart_events: - t - show BT connection time
-I (61141) uart_events: - T - show FreeRTOS task list
-I (61151) uart_events: - R - restart
+I (208804) uart_events: Device: RedPGP
+I (208814) uart_events: User Settings (lost on restart unless saved):
+I (208814) uart_events: - s - toggle PGP autospin
+I (208814) uart_events: - c - toggle PGP autocatch
+I (208824) uart_events: - p - toggle powerbank ping
+I (208824) uart_events: - l - toggle verbose logging
+I (208834) uart_events: - S - save user settings permanently
+I (208834) uart_events: Edit values:
+I (208844) uart_events: - m... - set maximum client connections (eg. 3 clients max. with 'm3', up to 4)
+I (208854) uart_events: - X... - edit secrets (select eg. slot 2 with 'X2!')
+I (208864) uart_events: Commands:
+I (208864) uart_events: - h,? - help
+I (208864) uart_events: - A - start BT advertising again
+I (208874) uart_events: - t - show BT connection times
+I (208884) uart_events: - C - show BT client states
+I (208884) uart_events: - T - show FreeRTOS task list
+I (208894) uart_events: - R - restart
 ```
 
 ### Development
@@ -174,6 +178,44 @@ hciT            B       22      1568    13      0
 BTU_TASK        B       20      1900    14      0
 btController    B       23      2080    11      0
 Tmr Svc         B       1       1568    7       0
+```
+
+Keeping track of multiple connections:
+
+```text
+# press 't':
+I (183264) pgp_handshake: active_connections: 2
+I (183264) pgp_handshake: - conn_id=0 connected for 137310 ms
+I (183264) pgp_handshake: - conn_id=1 connected for 91220 ms
+
+# press 'C' to see state tables for all 4 client slots:
+I (185944) pgp_handshake: active_connections: 2
+I (185944) pgp_handshake: conn_id_map:
+I (185944) pgp_handshake: 0: 0000
+I (185954) pgp_handshake: 1: 0001
+I (185954) pgp_handshake: 2: ffff
+I (185954) pgp_handshake: 3: ffff
+I (185964) pgp_handshake: client_states:
+I (185964) pgp_handshake: 0: conn_id=0, cert_state=6, recon_key=1, notify=1
+I (185974) pgp_handshake: timestamps: hs=4368, rc=0, cs=4537, ce=0
+I (185984) pgp_handshake: keys:
+I (185984) pgp_handshake: 8d 0f 9a 26 9c ed b3 5d 6d 3c e8 83 7d be e1 12 
+...
+I (186034) pgp_handshake: 1: conn_id=1, cert_state=6, recon_key=1, notify=1
+I (186044) pgp_handshake: timestamps: hs=8972, rc=0, cs=9146, ce=0
+I (186054) pgp_handshake: keys:
+I (186054) pgp_handshake: 9c 81 78 80 ab cf e3 8c 8e a0 b6 6c 7a 85 f8 5f
+...
+I (186114) pgp_handshake: 2: conn_id=0, cert_state=0, recon_key=0, notify=0
+I (186114) pgp_handshake: timestamps: hs=0, rc=0, cs=0, ce=0
+I (186124) pgp_handshake: keys:
+I (186124) pgp_handshake: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+...
+I (186184) pgp_handshake: 3: conn_id=0, cert_state=0, recon_key=0, notify=0
+I (186184) pgp_handshake: timestamps: hs=0, rc=0, cs=0, ce=0
+I (186194) pgp_handshake: keys:
+I (186194) pgp_handshake: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+...
 ```
 
 Changing PGP secrets slots:

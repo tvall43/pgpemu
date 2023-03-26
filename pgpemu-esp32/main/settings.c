@@ -6,6 +6,7 @@
 Settings settings = {
     .mutex = NULL,
     .chosen_device = 0,
+    .target_active_connections = 1,
     .autocatch = true,
     .autospin = true,
     .powerbank_ping = false,
@@ -47,6 +48,32 @@ bool get_setting(bool *var)
 
     xSemaphoreGive(settings.mutex);
     return result;
+}
+
+uint8_t get_setting_uint8(uint8_t *var)
+{
+    if (!var || !xSemaphoreTake(settings.mutex, portMAX_DELAY))
+    {
+        return 0;
+    }
+
+    uint8_t result = *var;
+
+    xSemaphoreGive(settings.mutex);
+    return result;
+}
+
+bool set_setting_uint8(uint8_t *var, const uint8_t val)
+{
+    if (!var || !xSemaphoreTake(settings.mutex, portMAX_DELAY))
+    {
+        return false;
+    }
+
+    *var = val;
+
+    xSemaphoreGive(settings.mutex);
+    return true;
 }
 
 bool set_chosen_device(uint8_t id)

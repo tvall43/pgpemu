@@ -12,6 +12,7 @@
 #include "log_tags.h"
 #include "pgp_gap.h"
 #include "pgp_gatts.h"
+#include "pgp_handshake_multi.h"
 #include "secrets.h"
 
 static const uint16_t ESP_APP_ID = 0x55;
@@ -22,6 +23,8 @@ uint8_t bt_mac[6];
 
 bool init_bluetooth()
 {
+    init_handshake_multi();
+    
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     // set mac address for pgp clone device

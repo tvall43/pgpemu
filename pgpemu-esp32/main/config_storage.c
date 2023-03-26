@@ -14,6 +14,7 @@ static const char KEY_AUTOCATCH[] = "catch";
 static const char KEY_AUTOSPIN[] = "spin";
 static const char KEY_POWERBANK_PING[] = "ping";
 static const char KEY_CHOSEN_DEVICE[] = "device";
+static const char KEY_CONNECTION_COUNT[] = "conns";
 static const char KEY_VERBOSE[] = "verbose";
 
 static nvs_handle_t user_settings_handle;
@@ -41,7 +42,7 @@ void read_stored_settings(bool use_mutex)
 {
     esp_err_t err;
     int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, verbose = 0;
-    uint8_t chosen_device = 0;
+    uint8_t chosen_device = 0, connection_count = 0;
 
     if (use_mutex)
     {
@@ -87,6 +88,19 @@ void read_stored_settings(bool use_mutex)
             ESP_LOGE(CONFIG_STORAGE_TAG, "invalid chosen device %d", chosen_device);
         }
     }
+    err = nvs_get_u8(user_settings_handle, KEY_CONNECTION_COUNT, &connection_count);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_CONNECTION_COUNT))
+    {
+        if (connection_count <= CONFIG_BT_ACL_CONNECTIONS && connection_count > 0)
+        {
+            settings.target_active_connections = connection_count;
+        }
+        else
+        {
+            ESP_LOGE(CONFIG_STORAGE_TAG, "invalid target active connections: %d (1-%d allowed)",
+                     connection_count, CONFIG_BT_ACL_CONNECTIONS);
+        }
+    }
 
     if (use_mutex)
     {
@@ -120,6 +134,8 @@ bool write_config_storage()
     // uint8s
     err = nvs_set_u8(user_settings_handle, KEY_CHOSEN_DEVICE, settings.chosen_device);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_CHOSEN_DEVICE);
+    err = nvs_set_u8(user_settings_handle, KEY_CONNECTION_COUNT, settings.target_active_connections);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_CONNECTION_COUNT);
 
     // give it back in any of the following cases
     xSemaphoreGive(settings.mutex);

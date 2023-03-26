@@ -9,110 +9,136 @@
 #include "log_tags.h"
 #include "pgp_bluetooth.h"
 #include "pgp_cert.h"
+#include "pgp_gap.h"
 #include "pgp_gatts.h"
+#include "pgp_handshake_multi.h"
 
-static uint8_t session_key[16];
+// disable using random values for the keys and nonces for debugging
+static const bool use_debug_buffer_values = false;
 
-// TODO this should be saved per connection
-static int cert_state = 0;
-
-static void generate_first_challenge()
+void handle_pgp_handshake_first(esp_gatt_if_t gatts_if, uint16_t descr_value, uint16_t conn_id)
 {
-    // TODO these values should probably randomized
-
-    // fill in cert_buffer
-    uint8_t the_challenge[16];
-    memset(the_challenge, 0x41, 16);
-    uint8_t main_nonce[16];
-    memset(main_nonce, 0x42, 16);
-
-    // use fixed key for easier debugging
-    memset(session_key, 0x43, 16);
-    uint8_t outer_nonce[16];
-    memset(outer_nonce, 0x44, 16);
-    generate_chal_0(bt_mac, the_challenge, main_nonce, session_key, outer_nonce,
-                    (struct challenge_data *)cert_buffer);
-}
-
-void handle_pgp_handshake_first(esp_gatt_if_t gatts_if, uint16_t descr_value,
-                                uint8_t *cert_buffer, int cert_buffer_len,
-                                int conn_id)
-{
-    assert(cert_buffer_len == 378);
+    client_state_t *client_state = get_or_create_client_state_entry(conn_id);
+    if (!client_state)
+    {
+        ESP_LOGE(HANDSHAKE_TAG, "couldn't get/create client state, conn_id=%d", conn_id);
+        return;
+    }
 
     if (descr_value == 0x0001)
     {
+        client_state->notify = true;
 
         uint8_t notify_data[4];
         memset(notify_data, 0, 4);
 
-        if (has_reconnect_key)
+        if (client_state->has_reconnect_key)
         {
-            memset(cert_buffer, 0, 36);
-            cert_buffer[0] = 3;
+            // reconnect challenge
             notify_data[0] = 3;
 
-            memcpy(cert_buffer + 4, reconnect_challenge, 32);
-            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 36, cert_buffer);
-            cert_state = 3;
+            memset(client_state->cert_buffer, 0, 36);
+            client_state->cert_buffer[0] = 3;
+            memcpy(client_state->cert_buffer + 4, client_state->reconnect_challenge, 32);
+
+            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 36, client_state->cert_buffer);
+
+            client_state->cert_state = 3;
         }
         else
         {
-            generate_first_challenge();
-            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 378, cert_buffer);
+            // first challenge
+            if (use_debug_buffer_values)
+            {
+                // use fixed key for easier debugging
+                memset(client_state->the_challenge, 0x41, 16);
+                memset(client_state->main_nonce, 0x42, 16);
+                memset(client_state->session_key, 0x43, 16);
+                memset(client_state->outer_nonce, 0x44, 16);
+                ESP_LOGW(HANDSHAKE_TAG, "using static nonces");
+            }
+            else
+            {
+                randomize_buffer(client_state->the_challenge, 16);
+                randomize_buffer(client_state->main_nonce, 16);
+                randomize_buffer(client_state->session_key, 16);
+                randomize_buffer(client_state->outer_nonce, 16);
+            }
+
+            generate_chal_0(bt_mac, client_state->the_challenge, client_state->main_nonce, client_state->session_key, client_state->outer_nonce,
+                            (struct challenge_data *)client_state->cert_buffer);
+
+            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 378, client_state->cert_buffer);
         }
 
-        ESP_LOGD(HANDSHAKE_TAG, "start CERT PAIRING, notify enable, conn_id=%d", conn_id);
+        ESP_LOGD(HANDSHAKE_TAG, "start CERT PAIRING, conn_id=%d", conn_id);
         // the size of notify_data[] need less than MTU size
         esp_ble_gatts_send_indicate(gatts_if, conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
                                     sizeof(notify_data), notify_data, false);
     }
-    else if (descr_value == 0x000)
+    else if (descr_value == 0x0000)
     {
+        client_state->notify = false;
         ESP_LOGD(HANDSHAKE_TAG, "notify disable, conn_id=%d", conn_id);
+    }
+    else
+    {
+        ESP_LOGE(HANDSHAKE_TAG, "unknown/indicate value");
     }
 }
 
 void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
                                  const uint8_t *prepare_buf, int datalen,
-                                 int conn_id)
+                                 uint16_t conn_id)
 {
-    if (cert_state >= 1)
+    client_state_t *client_state = get_client_state_entry(conn_id);
+    if (!client_state)
     {
-        ESP_LOGD(HANDSHAKE_TAG, "Handshake state=%d, received %d b, conn_id=%d", cert_state, datalen, conn_id);
+        ESP_LOGE(HANDSHAKE_TAG, "couldn't get client state, conn_id=%d", conn_id);
+        return;
     }
 
-    switch (cert_state)
+    if (client_state->cert_state >= 1)
     {
-    case 0:
+        ESP_LOGD(HANDSHAKE_TAG, "Handshake state=%d, received %d b, conn_id=%d", client_state->cert_state, datalen, conn_id);
+    }
+
+    switch (client_state->cert_state)
+    {
+    case 0: // normal challenge+response entry point
     {
         if (datalen == 20)
-        { // just assume server responds correctly
+        {
+            // just assume server responds correctly
             uint8_t notify_data[4];
             memset(notify_data, 0, 4);
             notify_data[0] = 0x01;
 
-            uint8_t nonce[16];
-
-            memset(nonce, 0x42, 16);
+            if (use_debug_buffer_values)
+            {
+                memset(client_state->state_0_nonce, 0x42, 16);
+            }
+            else
+            {
+                randomize_buffer(client_state->state_0_nonce, 16);
+            }
 
             uint8_t temp[52];
+            memset(temp, 0, sizeof(temp));
 
             struct next_challenge *chal = (struct next_challenge *)temp;
-            memset(temp, 0, sizeof(temp));
-            generate_next_chal(0, session_key, nonce, chal);
-            temp[0] = 0x01;
+            generate_next_chal(0, client_state->session_key, client_state->state_0_nonce, chal);
 
-            memcpy(cert_buffer, temp, 52);
+            temp[0] = 0x01;
+            memcpy(client_state->cert_buffer, temp, 52);
 
             // ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, temp, sizeof(temp));
-
-            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 52, cert_buffer);
-
             // ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, cert_buffer, 52);
 
-            cert_state = 1;
+            esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 52, client_state->cert_buffer);
             esp_ble_gatts_send_indicate(gatts_if, conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL], sizeof(notify_data), notify_data, false);
+
+            client_state->cert_state = 1;
         }
         else
         {
@@ -123,12 +149,11 @@ void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
     case 1:
     {
         // we need to decrypt and send challenge data from APP
-        ESP_LOGD(HANDSHAKE_TAG, "Received: %d", datalen);
-
         uint8_t temp[20];
         memset(temp, 0, sizeof(temp));
-        decrypt_next(prepare_buf, session_key, temp + 4);
+        decrypt_next(prepare_buf, client_state->session_key, temp + 4);
         temp[0] = 0x02;
+
         uint8_t notify_data[4];
         memset(notify_data, 0, 4);
         notify_data[0] = 0x02;
@@ -139,10 +164,12 @@ void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
             ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, temp, sizeof(temp));
         }
 
-        memcpy(cert_buffer, temp, 20);
-        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 20, cert_buffer);
-        cert_state = 2;
+        memcpy(client_state->cert_buffer, temp, 20);
+
+        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 20, client_state->cert_buffer);
         esp_ble_gatts_send_indicate(gatts_if, conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL], sizeof(notify_data), notify_data, false);
+
+        client_state->cert_state = 2;
         break;
     }
     case 2:
@@ -152,36 +179,44 @@ void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
 
         uint8_t temp[20];
         memset(temp, 0, sizeof(temp));
-        decrypt_next(prepare_buf, session_key, temp + 4);
+        decrypt_next(prepare_buf, client_state->session_key, temp + 4);
 
         if (esp_log_level_get(HANDSHAKE_TAG) >= ESP_LOG_DEBUG)
         {
-
             ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, temp, sizeof(temp));
         }
 
-        has_reconnect_key = 1;
-
-        // TODO should be random, but this is easier for debugging
-        memset(reconnect_challenge, 0x46, 32);
+        // generate reconnect key
+        client_state->has_reconnect_key = true;
+        if (use_debug_buffer_values)
+        {
+            memset(client_state->reconnect_challenge, 0x46, 32);
+        }
+        else
+        {
+            randomize_buffer(client_state->reconnect_challenge, 32);
+        }
 
         uint8_t notify_data[4] = {0x04, 0x00, 0x23, 0x00};
-        cert_state = 6;
         esp_ble_gatts_send_indicate(gatts_if,
                                     conn_id,
                                     certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
                                     sizeof(notify_data), notify_data, false);
+
+        client_state->cert_state = 6;
+        connection_start(conn_id);
+        advertise_if_needed();
         break;
     }
-    case 3:
+    case 3: // reconnection #1: entry point
     {
         if (datalen == 20)
-        { // just assume server responds correctly
+        {
+            // just assume server responds correctly
             ESP_LOGD(HANDSHAKE_TAG, "OK");
             if (esp_log_level_get(HANDSHAKE_TAG) >= ESP_LOG_DEBUG)
             {
-                ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, prepare_buf,
-                                   datalen);
+                ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, prepare_buf, datalen);
             }
 
             uint8_t notify_data[4] = {0x04, 0x00, 0x01, 0x00};
@@ -189,36 +224,39 @@ void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
                                         conn_id,
                                         certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
                                         sizeof(notify_data), notify_data, false);
-            cert_state = 4;
+
+            client_state->cert_state = 4;
         }
         break;
     }
-    case 4:
+    case 4: // reconnection #2
     {
         ESP_LOGD(HANDSHAKE_TAG, "OK");
 
-        memset(cert_buffer, 0, 4);
-        generate_reconnect_response(session_key, prepare_buf + 4, cert_buffer + 4);
-        cert_buffer[0] = 5;
+        memset(client_state->cert_buffer, 0, 4);
+        generate_reconnect_response(client_state->session_key, prepare_buf + 4, client_state->cert_buffer + 4);
+        client_state->cert_buffer[0] = 5;
 
         if (esp_log_level_get(HANDSHAKE_TAG) >= ESP_LOG_DEBUG)
         {
-            ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, cert_buffer, 20);
+            ESP_LOG_BUFFER_HEX(HANDSHAKE_TAG, client_state->cert_buffer, 20);
         }
 
         uint8_t notify_data[4];
         memset(notify_data, 0, 4);
         notify_data[0] = 0x05;
 
-        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 20, cert_buffer);
+        esp_ble_gatts_set_attr_value(certificate_handle_table[IDX_CHAR_SFIDA_TO_CENTRAL_VAL], 20, client_state->cert_buffer);
         esp_ble_gatts_send_indicate(gatts_if, conn_id, certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL], sizeof(notify_data), notify_data, false);
-        cert_state = 5;
+
+        client_state->cert_state = 5;
         break;
     }
-    case 5:
+    case 5: // reconnection #3: established
     {
         if (datalen == 5)
-        { // just assume server responds correctly
+        {
+            // just assume server responds correctly
             ESP_LOGD(HANDSHAKE_TAG, "OK");
 
             uint8_t notify_data[4] = {0x04, 0x00, 0x02, 0x00};
@@ -226,22 +264,25 @@ void handle_pgp_handshake_second(esp_gatt_if_t gatts_if,
                                         conn_id,
                                         certificate_handle_table[IDX_CHAR_SFIDA_COMMANDS_VAL],
                                         sizeof(notify_data), notify_data, false);
-            cert_state = 6;
+
+            client_state->cert_state = 6;
+            connection_update(conn_id);
         }
         break;
     }
     default:
-        ESP_LOGE(HANDSHAKE_TAG, "Unhandled state: %d", cert_state);
+        ESP_LOGE(HANDSHAKE_TAG, "Unhandled state: %d", client_state->cert_state);
         break;
     }
 }
 
-void pgp_handshake_disconnect(int conn_id)
+void pgp_handshake_disconnect(uint16_t conn_id)
 {
-    cert_state = 0;
+    // this deletes the client state entry
+    connection_stop(conn_id);
 }
 
-int pgp_get_handshake_state(int conn_id)
+int pgp_get_handshake_state(uint16_t conn_id)
 {
-    return cert_state;
+    return get_cert_state(conn_id);
 }

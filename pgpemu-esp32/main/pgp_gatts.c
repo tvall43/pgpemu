@@ -8,8 +8,6 @@
 #include "esp_gatts_api.h"
 #include "esp_gatt_common_api.h"
 #include "esp_bt_main.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "pgp_gatts.h"
 
@@ -17,8 +15,10 @@
 #include "pgp_gap.h"
 #include "pgp_gatts_debug.h"
 #include "pgp_handshake.h"
+#include "pgp_handshake_multi.h"
 #include "pgp_led_handler.h"
 #include "secrets.h"
+#include "settings.h"
 
 #define PROFILE_NUM 1
 #define PROFILE_APP_IDX 0
@@ -29,10 +29,10 @@
 #define BATTERY_INST_ID 1
 #define LED_BUTTON_INST_ID 2
 #else
-#define PGP_DEVICE_NAME "Pokemon GO Plus"
-#define BATTERY_INST_ID 0
-#define LED_BUTTON_INST_ID 1
-#define CERT_INST_ID 2
+static const char *PGP_DEVICE_NAME = "Pokemon GO Plus";
+static const uint8_t BATTERY_INST_ID = 0;
+static const uint8_t LED_BUTTON_INST_ID = 1;
+static const uint8_t CERT_INST_ID = 2;
 #endif
 
 /* The max length of characteristic value. When the gatt client write or prepare write,
@@ -41,10 +41,6 @@
 #define MAX_VALUE_LENGTH 500
 #define PREPARE_BUF_MAX_SIZE 1024
 #define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
-
-// TODO these should be saved per connection
-TickType_t connectionStart = 0;
-TickType_t connectionEnd = 0;
 
 uint16_t battery_handle_table[BATTERY_LAST_IDX];
 uint16_t led_button_handle_table[LED_BUTTON_LAST_IDX];
@@ -117,14 +113,11 @@ static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE;
 static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const uint8_t char_prop_notify = ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const uint8_t dummy_value[2] = {0x00, 0x00};
-uint8_t cert_buffer[378];
+static uint8_t cert_buffer[378] = {0};
 
 static const uint16_t GATTS_SERVICE_UUID_BATTERY = 0x180f;
 static const uint16_t GATTS_CHAR_UUID_BATTERY_LEVEL = 0x2a19;
 static const uint8_t battery_char_value[1] = {0x60};
-
-uint8_t reconnect_challenge[32];
-int has_reconnect_key = 0;
 
 static const esp_gatts_attr_db_t gatt_db_battery[BATTERY_LAST_IDX] = {
 
@@ -287,7 +280,10 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
             if (esp_log_level_get(BT_GATTS_TAG) >= ESP_LOG_VERBOSE)
             {
                 ESP_LOGV(BT_GATTS_TAG, "DATA SENT TO APP");
-                ESP_LOG_BUFFER_HEX(BT_GATTS_TAG, cert_buffer, 52);
+                if (gatt_db_certificate[IDX_CHAR_SFIDA_TO_CENTRAL_VAL].att_desc.value)
+                {
+                    ESP_LOG_BUFFER_HEX(BT_GATTS_TAG, gatt_db_certificate[IDX_CHAR_SFIDA_TO_CENTRAL_VAL].att_desc.value, 52);
+                }
             }
         }
         break;
@@ -309,7 +305,6 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
             {
                 uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
                 handle_pgp_handshake_first(gatts_if, descr_value,
-                                           cert_buffer, sizeof(cert_buffer),
                                            param->write.conn_id);
             }
             else if (certificate_handle_table[IDX_CHAR_CENTRAL_TO_SFIDA_VAL] == param->write.handle)
@@ -403,19 +398,14 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
         esp_ble_gap_update_conn_params(&conn_params);
 
         esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_MITM);
-
-        connectionStart = xTaskGetTickCount();
-        connectionEnd = 0;
         break;
     case ESP_GATTS_DISCONNECT_EVT:
         pgp_handshake_disconnect(param->disconnect.conn_id);
 
-        connectionEnd = xTaskGetTickCount();
-        ESP_LOGW(BT_GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, reason=%d, connected=%d ms",
-                 param->disconnect.reason, pdTICKS_TO_MS(connectionEnd - connectionStart));
-        connectionStart = 0;
+        ESP_LOGW(BT_GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, reason=%d, active_connections=%d",
+                 param->disconnect.reason, get_active_connections());
 
-        pgp_advertise();
+        advertise_if_needed();
         break;
     case ESP_GATTS_CREAT_ATTR_TAB_EVT:
     {

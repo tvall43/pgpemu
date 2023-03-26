@@ -118,7 +118,7 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     else if (count_red && !count_off && count_red == count_notoff)
     {
         // only red
-        ESP_LOGW(LED_TAG, "Can't spin Pokestop for some reason.");
+        ESP_LOGW(LED_TAG, "Can't catch Pokemon. Box is full.");
     }
     else if (count_green && count_green == count_notoff)
     {
@@ -193,12 +193,5 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
             item.delay = delay;
             xQueueSend(button_queue, &item, portMAX_DELAY);
         }
-    }
-
-    // currently all things which require button interaction are 30 s long.
-    // check for this in case the app changes.
-    if (press_button != (pattern_duration * 50 == 30000))
-    {
-        ESP_LOGE(LED_TAG, "button press vs. duration mismatch");
     }
 }

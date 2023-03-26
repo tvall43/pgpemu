@@ -3,6 +3,8 @@
 #include "pgp_gap.h"
 
 #include "log_tags.h"
+#include "pgp_handshake_multi.h"
+#include "settings.h"
 
 uint8_t adv_config_done = 0;
 
@@ -16,6 +18,19 @@ static esp_ble_adv_params_t adv_params = {
     .channel_map = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
+
+void advertise_if_needed()
+{
+    int target_active_connections = get_setting_uint8(&settings.target_active_connections);
+    if (get_active_connections() < target_active_connections)
+    {
+        pgp_advertise();
+    }
+    else
+    {
+        ESP_LOGI(BT_GAP_TAG, "not advertising again, %d connections reached", target_active_connections);
+    }
+}
 
 void pgp_advertise()
 {

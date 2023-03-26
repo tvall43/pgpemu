@@ -11,6 +11,7 @@
 #include "log_tags.h"
 #include "pgp_gap.h"
 #include "pgp_gatts.h"
+#include "pgp_handshake_multi.h"
 #include "secrets.h"
 #include "settings.h"
 
@@ -27,6 +28,7 @@ static uint8_t tmp_blob[sizeof(PGP_BLOB)];
 
 static void uart_event_task(void *pvParameters);
 static void uart_secrets_handler();
+static void uart_target_connections_handler();
 static bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes);
 static void uart_restart_command();
 
@@ -80,19 +82,12 @@ static void uart_event_task(void *pvParameters)
                 if (dtmp[0] == 't')
                 {
                     // show connection status
-                    TickType_t now = xTaskGetTickCount();
-                    if (connectionStart != 0)
-                    {
-                        ESP_LOGI(UART_TAG, "connected for %d ms", pdTICKS_TO_MS(now - connectionStart));
-                    }
-                    else if (connectionEnd != 0)
-                    {
-                        ESP_LOGI(UART_TAG, "disconnected for %d ms", pdTICKS_TO_MS(now - connectionEnd));
-                    }
-                    else
-                    {
-                        ESP_LOGI(UART_TAG, "no connection yet");
-                    }
+                    dump_client_connection_times();
+                }
+                else if (dtmp[0] == 'C')
+                {
+                    // show full client details
+                    dump_client_states();
                 }
                 else if (dtmp[0] == 's')
                 {
@@ -165,11 +160,17 @@ static void uart_event_task(void *pvParameters)
                     vTaskList(buf);
 
                     ESP_LOGI(UART_TAG, "Task List:\nTask Name\tStatus\tPrio\tHWM\tTask\tAffinity\n%s", buf);
+                    ESP_LOGI(UART_TAG, "UART stack watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
+                    ESP_LOGI(UART_TAG, "Heap free: %d bytes", esp_get_free_heap_size());
                 }
                 else if (dtmp[0] == 'X')
                 {
                     // enter secrets mode
                     uart_secrets_handler();
+                }
+                else if (dtmp[0] == 'm')
+                {
+                    uart_target_connections_handler();
                 }
                 else if (dtmp[0] == 'h' || dtmp[0] == '?')
                 {
@@ -180,11 +181,14 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(UART_TAG, "- p - toggle powerbank ping");
                     ESP_LOGI(UART_TAG, "- l - toggle verbose logging");
                     ESP_LOGI(UART_TAG, "- S - save user settings permanently");
+                    ESP_LOGI(UART_TAG, "Edit values:");
+                    ESP_LOGI(UART_TAG, "- m... - set maximum client connections (eg. 3 clients max. with 'm3', up to %d)", CONFIG_BT_ACL_CONNECTIONS);
+                    ESP_LOGI(UART_TAG, "- X... - edit secrets (select eg. slot 2 with 'X2!')");
                     ESP_LOGI(UART_TAG, "Commands:");
                     ESP_LOGI(UART_TAG, "- h,? - help");
                     ESP_LOGI(UART_TAG, "- A - start BT advertising again");
-                    ESP_LOGI(UART_TAG, "- X - edit secrets (select eg. slot 2 with 'X2!')");
-                    ESP_LOGI(UART_TAG, "- t - show BT connection time");
+                    ESP_LOGI(UART_TAG, "- t - show BT connection times");
+                    ESP_LOGI(UART_TAG, "- C - show BT client states");
                     ESP_LOGI(UART_TAG, "- T - show FreeRTOS task list");
                     ESP_LOGI(UART_TAG, "- R - restart");
                 }
@@ -232,7 +236,7 @@ static void uart_event_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-void uart_secrets_handler()
+static void uart_secrets_handler()
 {
     // uart rx buffer
     uint8_t buf[512];
@@ -471,7 +475,7 @@ void uart_secrets_handler()
 }
 
 // get a base64 encoded buffer (inBuf) with inBytes and write it to the target secret
-bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes)
+static bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes)
 {
     int len;
     uint8_t *outBuf;
@@ -519,11 +523,44 @@ bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes)
     return true;
 }
 
-void uart_restart_command()
+static void uart_restart_command()
 {
     ESP_LOGI(UART_TAG, "closing nvs");
     close_config_storage();
     ESP_LOGI(UART_TAG, "restarting");
     fflush(stdout);
     esp_restart();
+}
+
+static void uart_target_connections_handler()
+{
+    uint8_t buf;
+    int size = uart_read_bytes(EX_UART_NUM, &buf, 1, 10000 / portTICK_PERIOD_MS);
+    if (size != 1)
+    {
+        // timeout
+        ESP_LOGE(UART_TAG, "[m]aximum active connections setting timeout");
+        return;
+    }
+    else if (buf < '1' || buf > '9')
+    {
+        ESP_LOGE(UART_TAG, "only ascii numbers 1-%d are allowed", CONFIG_BT_ACL_CONNECTIONS);
+        return;
+    }
+
+    int new_value = buf - '0';
+    if (new_value < 1 || new_value > CONFIG_BT_ACL_CONNECTIONS)
+    {
+        ESP_LOGE(UART_TAG, "out of range: 1-%d", CONFIG_BT_ACL_CONNECTIONS);
+        return;
+    }
+
+    if (set_setting_uint8(&settings.target_active_connections, new_value))
+    {
+        ESP_LOGI(UART_TAG, "target_active_connections now %d (press 'S' to save permanently)", new_value);
+    }
+    else
+    {
+        ESP_LOGE(UART_TAG, "failed editing setting");
+    }
 }
