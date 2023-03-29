@@ -4,6 +4,7 @@
 
 #include "pgp_handshake_multi.h"
 
+#include "led_output.h"
 #include "log_tags.h"
 
 static int active_connections = 0;
@@ -86,7 +87,12 @@ static void delete_client_state_entry(client_state_t *entry)
 
 int get_cert_state(uint16_t conn_id)
 {
-    return get_client_state_entry(conn_id)->cert_state;
+    client_state_t *entry = get_client_state_entry(conn_id);
+    if (!entry) {
+        ESP_LOGE(HANDSHAKE_TAG, "get_cert_state: conn_id %d unknown", conn_id);
+        return 0;
+    }
+    return entry->cert_state;
 }
 
 void connection_start(uint16_t conn_id)
@@ -96,8 +102,13 @@ void connection_start(uint16_t conn_id)
     client_state_t *entry = get_client_state_entry(conn_id);
     if (!entry)
     {
-        ESP_LOGE(HANDSHAKE_TAG, "failed entry start");
+        ESP_LOGE(HANDSHAKE_TAG, "connection_start: conn_id %d unknown", conn_id);
         return;
+    }
+    if (active_connections == 1)
+    {
+        // turn leds off
+        show_rgb_event(false, false, false, 0);
     }
 
     entry->conn_id = conn_id;
@@ -113,7 +124,7 @@ void connection_update(uint16_t conn_id)
     client_state_t *entry = get_client_state_entry(conn_id);
     if (!entry)
     {
-        ESP_LOGE(HANDSHAKE_TAG, "failed entry update");
+        ESP_LOGE(HANDSHAKE_TAG, "connection_update: conn_id %d unknown", conn_id);
         return;
     }
     entry->reconnection_at = xTaskGetTickCount();
@@ -128,11 +139,16 @@ void connection_stop(uint16_t conn_id)
         ESP_LOGE(HANDSHAKE_TAG, "we counted connections wrong!");
         active_connections = 0;
     }
+    if (active_connections == 0)
+    {
+        // show blue as long as nobody is connected
+        show_rgb_event(false, false, true, 0);
+    }
 
     client_state_t *entry = get_client_state_entry(conn_id);
     if (!entry)
     {
-        ESP_LOGE(HANDSHAKE_TAG, "failed entry end");
+        ESP_LOGE(HANDSHAKE_TAG, "connection_stop: conn_id %d unknown", conn_id);
         return;
     }
 

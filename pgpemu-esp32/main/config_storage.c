@@ -17,8 +17,6 @@ static const char KEY_CHOSEN_DEVICE[] = "device";
 static const char KEY_CONNECTION_COUNT[] = "conns";
 static const char KEY_VERBOSE[] = "verbose";
 
-static nvs_handle_t user_settings_handle;
-
 void init_config_storage()
 {
     esp_err_t err;
@@ -30,10 +28,6 @@ void init_config_storage()
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(err);
-
-    // open config partition
-    err = nvs_open("user_settings", NVS_READWRITE, &user_settings_handle);
     ESP_ERROR_CHECK(err);
 }
 
@@ -52,6 +46,11 @@ void read_stored_settings(bool use_mutex)
             return;
         }
     }
+
+    // open config partition
+    nvs_handle_t user_settings_handle;
+    err = nvs_open("user_settings", NVS_READONLY, &user_settings_handle);
+    ESP_ERROR_CHECK(err);
 
     // read bool settings
     err = nvs_get_i8(user_settings_handle, KEY_AUTOCATCH, &autocatch);
@@ -101,6 +100,8 @@ void read_stored_settings(bool use_mutex)
                      connection_count, CONFIG_BT_ACL_CONNECTIONS);
         }
     }
+    
+    nvs_close(user_settings_handle);
 
     if (use_mutex)
     {
@@ -118,6 +119,11 @@ bool write_config_storage()
         ESP_LOGE(CONFIG_STORAGE_TAG, "cannot get settings mutex");
         return false;
     }
+
+    // open config partition
+    nvs_handle_t user_settings_handle;
+    err = nvs_open("user_settings", NVS_READWRITE, &user_settings_handle);
+    ESP_ERROR_CHECK(err);
 
     bool all_ok = true;
 
@@ -144,13 +150,10 @@ bool write_config_storage()
     if (err != ESP_OK)
     {
         ESP_LOGE(CONFIG_STORAGE_TAG, "commit failed");
+        nvs_close(user_settings_handle);
         return false;
     }
 
-    return all_ok;
-}
-
-void close_config_storage()
-{
     nvs_close(user_settings_handle);
+    return all_ok;
 }

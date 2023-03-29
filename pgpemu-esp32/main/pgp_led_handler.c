@@ -6,9 +6,12 @@
 #include "esp_log.h"
 #include "esp_system.h"
 
+#include "led_output.h"
 #include "log_tags.h"
 #include "pgp_autobutton.h"
 #include "settings.h"
+
+static const int led_duration_ms = 200;
 
 void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const uint8_t *buffer)
 {
@@ -109,16 +112,19 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     {
         // only white
         ESP_LOGW(LED_TAG, "Can't spin Pokestop. Bag is full.");
+        show_rgb_event(true, false, false, 3 * led_duration_ms);
     }
     else if (count_red && count_off && count_red == count_notoff)
     {
         // blinking just red
         ESP_LOGW(LED_TAG, "Pokeballs are empty or Pokestop went out of range.");
+        show_rgb_event(true, false, false, 1 * led_duration_ms);
     }
     else if (count_red && !count_off && count_red == count_notoff)
     {
         // only red
         ESP_LOGW(LED_TAG, "Can't catch Pokemon. Box is full.");
+        show_rgb_event(true, false, false, 3 * led_duration_ms);
     }
     else if (count_green && count_green == count_notoff)
     {
@@ -148,10 +154,12 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     {
         if (count_blue && count_green)
         {
+            show_rgb_event(false, true, false, led_duration_ms); // green
             ESP_LOGI(LED_TAG, "Caught Pokemon after %d ball shakes.", count_ballshake);
         }
         else if (count_red)
         {
+            show_rgb_event(true, false, true, led_duration_ms); // pink
             ESP_LOGI(LED_TAG, "Pokemon fled after %d ball shakes.", count_ballshake);
         }
         else
@@ -161,6 +169,7 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     }
     else if (count_red && count_green && count_blue && !count_off)
     {
+        show_rgb_event(false, false, true, led_duration_ms); // blue
         // blinking grb-grb...
         ESP_LOGI(LED_TAG, "Got items from Pokestop.");
     }

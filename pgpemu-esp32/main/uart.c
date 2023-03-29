@@ -14,6 +14,7 @@
 #include "pgp_handshake_multi.h"
 #include "secrets.h"
 #include "settings.h"
+#include "stats.h"
 
 static const uart_port_t EX_UART_NUM = UART_NUM_0;
 static const int BUF_SIZE = 1024;
@@ -136,8 +137,13 @@ static void uart_event_task(void *pvParameters)
                 }
                 else if (dtmp[0] == 'A')
                 {
-                    ESP_LOGI(UART_TAG, "starting advertising YOLO");
+                    ESP_LOGI(UART_TAG, "starting advertising");
                     pgp_advertise();
+                }
+                else if (dtmp[0] == 'a')
+                {
+                    ESP_LOGI(UART_TAG, "stopping advertising");
+                    pgp_advertise_stop();
                 }
                 else if (dtmp[0] == 'S')
                 {
@@ -147,6 +153,10 @@ static void uart_event_task(void *pvParameters)
                     {
                         ESP_LOGI(UART_TAG, "success!");
                     }
+                }
+                else if (dtmp[0] == 'r')
+                {
+                    ESP_LOGI(UART_TAG, "runtime: %d min", stats_get_runtime());
                 }
                 else if (dtmp[0] == 'R')
                 {
@@ -160,7 +170,6 @@ static void uart_event_task(void *pvParameters)
                     vTaskList(buf);
 
                     ESP_LOGI(UART_TAG, "Task List:\nTask Name\tStatus\tPrio\tHWM\tTask\tAffinity\n%s", buf);
-                    ESP_LOGI(UART_TAG, "UART stack watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
                     ESP_LOGI(UART_TAG, "Heap free: %d bytes", esp_get_free_heap_size());
                 }
                 else if (dtmp[0] == 'X')
@@ -186,9 +195,11 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(UART_TAG, "- X... - edit secrets (select eg. slot 2 with 'X2!')");
                     ESP_LOGI(UART_TAG, "Commands:");
                     ESP_LOGI(UART_TAG, "- h,? - help");
-                    ESP_LOGI(UART_TAG, "- A - start BT advertising again");
+                    ESP_LOGI(UART_TAG, "- A - start BT advertising");
+                    ESP_LOGI(UART_TAG, "- a - stop BT advertising");
                     ESP_LOGI(UART_TAG, "- t - show BT connection times");
                     ESP_LOGI(UART_TAG, "- C - show BT client states");
+                    ESP_LOGI(UART_TAG, "- r - show runtime counter");
                     ESP_LOGI(UART_TAG, "- T - show FreeRTOS task list");
                     ESP_LOGI(UART_TAG, "- R - restart");
                 }
@@ -525,8 +536,6 @@ static bool decode_to_buf(char targetType, uint8_t *inBuf, int inBytes)
 
 static void uart_restart_command()
 {
-    ESP_LOGI(UART_TAG, "closing nvs");
-    close_config_storage();
     ESP_LOGI(UART_TAG, "restarting");
     fflush(stdout);
     esp_restart();

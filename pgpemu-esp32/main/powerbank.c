@@ -47,4 +47,6 @@ static void powerbank_task(void *pvParameters)
 
         vTaskDelayUntil(&previousWakeTime, 30000 / portTICK_PERIOD_MS);
     }
+
+    vTaskDelete(NULL);
 }

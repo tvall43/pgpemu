@@ -1,8 +1,10 @@
 #include "esp_system.h"
 #include "esp_log.h"
 
+#include "button_input.h"
 #include "config_secrets.h"
 #include "config_storage.h"
+#include "led_output.h"
 #include "log_tags.h"
 #include "pgp_autobutton.h"
 #include "pgp_bluetooth.h"
@@ -11,6 +13,7 @@
 #include "powerbank.h"
 #include "secrets.h"
 #include "settings.h"
+#include "stats.h"
 #include "uart.h"
 
 void app_main()
@@ -20,6 +23,13 @@ void app_main()
 
     // uart menu
     init_uart();
+
+    // rgb led
+    init_led_output();
+    // show red
+    show_rgb_event(true, false, false, 0);
+    // push button
+    init_button_input();
 
     // init nvs storage
     init_config_storage();
@@ -55,6 +65,9 @@ void app_main()
         return;
     }
 
+    // runtime counter
+    init_stats();
+
     // start autobutton task
     if (!init_autobutton())
     {
@@ -78,4 +91,9 @@ void app_main()
 
     // make settings available
     settings_ready();
+
+    // show green for 1 s
+    show_rgb_event(false, true, false, 1000);
+    // show blue until someone connects
+    show_rgb_event(false, false, true, 0);
 }

@@ -37,6 +37,11 @@ void pgp_advertise()
     esp_ble_gap_start_advertising(&adv_params);
 }
 
+void pgp_advertise_stop()
+{
+    esp_ble_gap_stop_advertising();
+}
+
 void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
     switch (event)

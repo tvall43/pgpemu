@@ -25,7 +25,7 @@ bool init_autobutton()
         return false;
     }
 
-    xTaskCreate(autobutton_task, "autobutton_task", 2048, NULL, 11, NULL);
+    xTaskCreate(autobutton_task, "autobutton_task", 3072, NULL, 11, NULL);
 
     return true;
 }
@@ -75,4 +75,6 @@ static void autobutton_task(void *pvParameters)
                                         sizeof(notify_data), notify_data, false);
         }
     }
+
+    vTaskDelete(NULL);
 }
