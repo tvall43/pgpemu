@@ -117,6 +117,24 @@ static void uart_event_task(void *pvParameters)
                     }
                     ESP_LOGI(UART_TAG, "powerbank ping %s", get_setting(&settings.powerbank_ping) ? "on" : "off");
                 }
+                else if (dtmp[0] == 'B')
+                {
+                    // toggle input button
+                    if (!toggle_setting(&settings.use_button))
+                    {
+                        ESP_LOGE(UART_TAG, "failed!");
+                    }
+                    ESP_LOGI(UART_TAG, "input button %s", get_setting(&settings.use_button) ? "available" : "not available");
+                }
+                else if (dtmp[0] == 'O')
+                {
+                    // toggle output led
+                    if (!toggle_setting(&settings.use_led))
+                    {
+                        ESP_LOGE(UART_TAG, "failed!");
+                    }
+                    ESP_LOGI(UART_TAG, "output led %s", get_setting(&settings.use_led) ? "available" : "not available");
+                }
                 else if (dtmp[0] == 'l')
                 {
                     // toggle verbose logging
@@ -189,12 +207,14 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(UART_TAG, "- c - toggle PGP autocatch");
                     ESP_LOGI(UART_TAG, "- p - toggle powerbank ping");
                     ESP_LOGI(UART_TAG, "- l - toggle verbose logging");
-                    ESP_LOGI(UART_TAG, "- S - save user settings permanently");
-                    ESP_LOGI(UART_TAG, "Edit values:");
                     ESP_LOGI(UART_TAG, "- m... - set maximum client connections (eg. 3 clients max. with 'm3', up to %d)", CONFIG_BT_ACL_CONNECTIONS);
-                    ESP_LOGI(UART_TAG, "- X... - edit secrets (select eg. slot 2 with 'X2!')");
+                    ESP_LOGI(UART_TAG, "- S - save user settings permanently");
+                    ESP_LOGI(UART_TAG, "Hardware Settings (only read at boot time, use 'S' to save):");
+                    ESP_LOGI(UART_TAG, "- B - toggle input button available");
+                    ESP_LOGI(UART_TAG, "- O - toggle output RGB LED available");
                     ESP_LOGI(UART_TAG, "Commands:");
                     ESP_LOGI(UART_TAG, "- h,? - help");
+                    ESP_LOGI(UART_TAG, "- X... - edit secrets mode (select eg. slot 2 with 'X2!')");
                     ESP_LOGI(UART_TAG, "- A - start BT advertising");
                     ESP_LOGI(UART_TAG, "- a - stop BT advertising");
                     ESP_LOGI(UART_TAG, "- t - show BT connection times");

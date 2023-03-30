@@ -1,9 +1,13 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
 #include "led_output.h"
+
+#include "log_tags.h"
+#include "settings.h"
 
 typedef struct
 {
@@ -19,6 +23,8 @@ static void leds_off();
 static void led_output_task(void *pvParameters);
 
 static QueueHandle_t led_queue;
+
+static bool led_enabled = false;
 
 void init_led_output()
 {
@@ -38,6 +44,10 @@ void init_led_output()
 
 void show_rgb_event(bool red, bool green, bool blue, int duration_ms)
 {
+    if (!led_enabled) {
+        return;
+    }
+
     LedEvent led_event = {
         .red = 1 - red,
         .green = 1 - green,

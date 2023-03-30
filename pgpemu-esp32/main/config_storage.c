@@ -15,6 +15,8 @@ static const char KEY_AUTOSPIN[] = "spin";
 static const char KEY_POWERBANK_PING[] = "ping";
 static const char KEY_CHOSEN_DEVICE[] = "device";
 static const char KEY_CONNECTION_COUNT[] = "conns";
+static const char KEY_USE_BUTTON[] = "usebut";
+static const char KEY_USE_LED[] = "useled";
 static const char KEY_VERBOSE[] = "verbose";
 
 void init_config_storage()
@@ -35,7 +37,7 @@ void init_config_storage()
 void read_stored_settings(bool use_mutex)
 {
     esp_err_t err;
-    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, verbose = 0;
+    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, use_button = 0, use_led = 0, verbose = 0;
     uint8_t chosen_device = 0, connection_count = 0;
 
     if (use_mutex)
@@ -50,7 +52,20 @@ void read_stored_settings(bool use_mutex)
     // open config partition
     nvs_handle_t user_settings_handle;
     err = nvs_open("user_settings", NVS_READONLY, &user_settings_handle);
-    ESP_ERROR_CHECK(err);
+    if (err != ESP_OK)
+    {
+        if (err == ESP_ERR_NVS_NOT_FOUND)
+        {
+            ESP_LOGW(CONFIG_STORAGE_TAG, "user settings partition doesn't exist, using default settings");
+        }
+        else
+        {
+            ESP_ERROR_CHECK(err); // panic
+        }
+
+        xSemaphoreGive(settings.mutex);
+        return;
+    }
 
     // read bool settings
     err = nvs_get_i8(user_settings_handle, KEY_AUTOCATCH, &autocatch);
@@ -67,6 +82,16 @@ void read_stored_settings(bool use_mutex)
     if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING))
     {
         settings.powerbank_ping = (bool)powerbank_ping;
+    }
+    err = nvs_get_i8(user_settings_handle, KEY_USE_BUTTON, &use_button);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_USE_BUTTON))
+    {
+        settings.use_button = (bool)use_button;
+    }
+    err = nvs_get_i8(user_settings_handle, KEY_USE_LED, &use_led);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_USE_LED))
+    {
+        settings.use_led = (bool)use_led;
     }
     err = nvs_get_i8(user_settings_handle, KEY_VERBOSE, &verbose);
     if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE))
@@ -100,7 +125,7 @@ void read_stored_settings(bool use_mutex)
                      connection_count, CONFIG_BT_ACL_CONNECTIONS);
         }
     }
-    
+
     nvs_close(user_settings_handle);
 
     if (use_mutex)
@@ -134,6 +159,10 @@ bool write_config_storage()
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_AUTOSPIN);
     err = nvs_set_i8(user_settings_handle, KEY_POWERBANK_PING, settings.powerbank_ping);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_POWERBANK_PING);
+    err = nvs_set_i8(user_settings_handle, KEY_USE_BUTTON, settings.use_button);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_USE_BUTTON);
+    err = nvs_set_i8(user_settings_handle, KEY_USE_LED, settings.use_led);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_USE_LED);
     err = nvs_set_i8(user_settings_handle, KEY_VERBOSE, settings.verbose);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE);
 

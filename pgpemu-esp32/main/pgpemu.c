@@ -18,18 +18,20 @@
 
 void app_main()
 {
+    // uart menu. put it first because is purges all logs
+    init_uart();
+
     // set log levels which let init msgs through
     log_levels_init();
 
-    // uart menu
-    init_uart();
-
-    // rgb led
-    init_led_output();
-    // show red
-    show_rgb_event(true, false, false, 0);
-    // push button
-    init_button_input();
+    // check reset reason
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    ESP_LOGI(PGPEMU_TAG, "reset reason: %d", reset_reason);
+    if (reset_reason == ESP_RST_BROWNOUT)
+    {
+        // keep it from bootlooping too quick when powering from low battery
+        vTaskDelay(60000 / portTICK_PERIOD_MS);
+    }
 
     // init nvs storage
     init_config_storage();
@@ -49,6 +51,28 @@ void app_main()
     {
         ESP_LOGI(PGPEMU_TAG, "log levels default");
         log_levels_min();
+    }
+
+    // rgb led
+    if (settings.use_led)
+    {
+        init_led_output();
+        // show red
+        show_rgb_event(true, false, false, 0);
+    }
+    else
+    {
+        ESP_LOGI(PGPEMU_TAG, "output led disabled");
+    }
+
+    // push button
+    if (settings.use_button)
+    {
+        init_button_input();
+    }
+    else
+    {
+        ESP_LOGI(PGPEMU_TAG, "input button disabled");
     }
 
     // make sure we're not turned off

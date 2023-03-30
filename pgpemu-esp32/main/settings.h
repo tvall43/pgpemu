@@ -21,6 +21,12 @@ typedef struct
     // waste a bit of power to keep your powerbank from turning us off
     bool powerbank_ping;
 
+    // do you have an input button? only checked on boot
+    bool use_button;
+
+    // do you have an LED? only checked on boot
+    bool use_led;
+
     // verbose log messages
     bool verbose;
 } Settings;

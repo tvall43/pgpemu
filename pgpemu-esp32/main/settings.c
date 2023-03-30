@@ -10,6 +10,8 @@ Settings settings = {
     .autocatch = true,
     .autospin = true,
     .powerbank_ping = false,
+    .use_button = false,
+    .use_led = false,
     .verbose = true,
 };
 

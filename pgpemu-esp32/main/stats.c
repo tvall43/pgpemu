@@ -29,11 +29,12 @@ static uint32_t read_runtime()
     esp_err_t err = nvs_open("stats", NVS_READONLY, &handle);
     if (err != ESP_OK)
     {
-        ESP_LOGW(STATS_TAG, "%s nvs open failed: %s", __func__, esp_err_to_name(err));
         if (err == ESP_ERR_NVS_NOT_FOUND)
         {
-            return 0; // first run, namespace doesn't exist yet
+            ESP_LOGW(STATS_TAG, "runtime count initialized with 0");
+            return 0;
         }
+        ESP_LOGW(STATS_TAG, "%s nvs open failed: %s", __func__, esp_err_to_name(err));
         return UINT32_MAX; // error
     }
 

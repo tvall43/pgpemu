@@ -51,6 +51,8 @@ static void button_input_task(void *pvParameters)
 {
     uint32_t button_event;
 
+    ESP_LOGI(BUTTON_INPUT_TAG, "task start");
+
     while (true)
     {
         if (xQueueReceive(button_input_queue, &button_event, portMAX_DELAY))
