@@ -20,7 +20,7 @@ This fork adds some features:
 - setting: chose between PGP secrets if you have dumps from multiple PGPs
 - setting: chose target number of client connections (Bluetooth advertising starts again automatically until all clients are connected)
 - store user settings in NVS
-- why not use it together with [a fashionable case](https://www.thingiverse.com/thing:5892225)? :)
+- why not use it together with [a fashionable case](https://github.com/spezifisch/pgpemu-case)? :)
 
 ## Hardware
 
