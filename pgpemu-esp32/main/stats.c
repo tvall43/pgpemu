@@ -12,6 +12,7 @@ static void stats_task(void *pvParameters);
 static const char *KEY_RUNTIME_10MIN = "runtime10min";
 
 static uint32_t runtime = 0;
+static const uint32_t runtime_max = 500; // only count until about 3 days to avoid flash wear
 
 void init_stats()
 {
@@ -90,6 +91,11 @@ static void stats_task(void *pvParameters)
 
     while (true)
     {
+        if (runtime > runtime_max) {
+            ESP_LOGI(STATS_TAG, "stopping runtime counting to avoid flash wear at count %d", runtime);
+            break;
+        }
+
         // every 10 minutes
         vTaskDelayUntil(&previousWakeTime, (10 * 60 * 1000) / portTICK_PERIOD_MS);
 
