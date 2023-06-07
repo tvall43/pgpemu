@@ -18,7 +18,7 @@
 
 void app_main()
 {
-    // uart menu. put it first because is purges all logs
+    // uart menu. put it first because it purges all logs
     init_uart();
 
     // set log levels which let init msgs through

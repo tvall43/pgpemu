@@ -27,6 +27,9 @@ typedef struct
     // do you have an LED? only checked on boot
     bool use_led;
 
+    // show pokestop/pokemon interactions using the LED (errors like "bag full" are always shown)
+    bool led_interactions;
+
     // verbose log messages
     bool verbose;
 } Settings;

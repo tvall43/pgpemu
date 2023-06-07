@@ -17,6 +17,7 @@ static const char KEY_CHOSEN_DEVICE[] = "device";
 static const char KEY_CONNECTION_COUNT[] = "conns";
 static const char KEY_USE_BUTTON[] = "usebut";
 static const char KEY_USE_LED[] = "useled";
+static const char KEY_SHOW_LED_INTERACTIONS[] = "ledinter";
 static const char KEY_VERBOSE[] = "verbose";
 
 void init_config_storage()
@@ -37,7 +38,8 @@ void init_config_storage()
 void read_stored_settings(bool use_mutex)
 {
     esp_err_t err;
-    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, use_button = 0, use_led = 0, verbose = 0;
+    int8_t autocatch = 0, autospin = 0, powerbank_ping = 0, use_button = 0, use_led = 0,
+           led_interactions = 0, verbose = 0;
     uint8_t chosen_device = 0, connection_count = 0;
 
     if (use_mutex)
@@ -92,6 +94,11 @@ void read_stored_settings(bool use_mutex)
     if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_USE_LED))
     {
         settings.use_led = (bool)use_led;
+    }
+    err = nvs_get_i8(user_settings_handle, KEY_SHOW_LED_INTERACTIONS, &led_interactions);
+    if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_SHOW_LED_INTERACTIONS))
+    {
+        settings.led_interactions = (bool)led_interactions;
     }
     err = nvs_get_i8(user_settings_handle, KEY_VERBOSE, &verbose);
     if (nvs_read_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE))
@@ -163,6 +170,8 @@ bool write_config_storage()
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_USE_BUTTON);
     err = nvs_set_i8(user_settings_handle, KEY_USE_LED, settings.use_led);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_USE_LED);
+    err = nvs_set_i8(user_settings_handle, KEY_SHOW_LED_INTERACTIONS, settings.led_interactions);
+    all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_SHOW_LED_INTERACTIONS);
     err = nvs_set_i8(user_settings_handle, KEY_VERBOSE, settings.verbose);
     all_ok = all_ok && nvs_write_check(CONFIG_STORAGE_TAG, err, KEY_VERBOSE);
 

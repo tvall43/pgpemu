@@ -12,6 +12,7 @@ Settings settings = {
     .powerbank_ping = false,
     .use_button = false,
     .use_led = false,
+    .led_interactions = true,
     .verbose = true,
 };
 

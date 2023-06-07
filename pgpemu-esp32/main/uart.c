@@ -117,6 +117,15 @@ static void uart_event_task(void *pvParameters)
                     }
                     ESP_LOGI(UART_TAG, "powerbank ping %s", get_setting(&settings.powerbank_ping) ? "on" : "off");
                 }
+                else if (dtmp[0] == 'i')
+                {
+                    // toggle show led interactions
+                    if (!toggle_setting(&settings.led_interactions))
+                    {
+                        ESP_LOGE(UART_TAG, "failed!");
+                    }
+                    ESP_LOGI(UART_TAG, "show led interactions %s", get_setting(&settings.led_interactions) ? "on" : "off");
+                }
                 else if (dtmp[0] == 'B')
                 {
                     // toggle input button
@@ -206,6 +215,7 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(UART_TAG, "- s - toggle PGP autospin");
                     ESP_LOGI(UART_TAG, "- c - toggle PGP autocatch");
                     ESP_LOGI(UART_TAG, "- p - toggle powerbank ping");
+                    ESP_LOGI(UART_TAG, "- i - toggle showing autospin/catch actions on LED");
                     ESP_LOGI(UART_TAG, "- l - toggle verbose logging");
                     ESP_LOGI(UART_TAG, "- m... - set maximum client connections (eg. 3 clients max. with 'm3', up to %d)", CONFIG_BT_ACL_CONNECTIONS);
                     ESP_LOGI(UART_TAG, "- S - save user settings permanently");

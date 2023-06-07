@@ -102,6 +102,7 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
 
     ESP_LOGI(LEDHANDLER_TAG, "LED pattern total duration: %d ms, conn_id=%d, Event:", pattern_duration * 50, conn_id);
 
+    const bool show_interactions = get_setting(&settings.led_interactions);
     bool press_button = false;
 
     if (count_off && !count_notoff)
@@ -154,12 +155,16 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     {
         if (count_blue && count_green)
         {
-            show_rgb_event(false, true, false, led_duration_ms); // green
+            if (show_interactions) {
+                show_rgb_event(false, true, false, led_duration_ms); // green
+            }
             ESP_LOGI(LEDHANDLER_TAG, "Caught Pokemon after %d ball shakes.", count_ballshake);
         }
         else if (count_red)
         {
-            show_rgb_event(true, false, true, led_duration_ms); // pink
+            if (show_interactions) {
+                show_rgb_event(true, false, true, led_duration_ms); // pink
+            }
             ESP_LOGI(LEDHANDLER_TAG, "Pokemon fled after %d ball shakes.", count_ballshake);
         }
         else
@@ -169,7 +174,9 @@ void handle_led_notify_from_app(esp_gatt_if_t gatts_if, uint16_t conn_id, const 
     }
     else if (count_red && count_green && count_blue && !count_off)
     {
-        show_rgb_event(false, false, true, led_duration_ms); // blue
+        if (show_interactions) {
+            show_rgb_event(false, false, true, led_duration_ms); // blue
+        }
         // blinking grb-grb...
         ESP_LOGI(LEDHANDLER_TAG, "Got items from Pokestop.");
     }
