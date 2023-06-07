@@ -24,7 +24,7 @@ static void led_output_task(void *pvParameters);
 
 static QueueHandle_t led_queue;
 
-static bool led_enabled = false;
+static bool led_ready = false;
 
 void init_led_output()
 {
@@ -39,12 +39,14 @@ void init_led_output()
     leds_off();
 
     led_queue = xQueueCreate(10, sizeof(LedEvent));
+    led_ready = true;
     xTaskCreate(led_output_task, "led_output_task", 2048, NULL, 14, NULL);
 }
 
 void show_rgb_event(bool red, bool green, bool blue, int duration_ms)
 {
-    if (!led_enabled) {
+    if (!led_ready)
+    {
         return;
     }
 
@@ -54,11 +56,13 @@ void show_rgb_event(bool red, bool green, bool blue, int duration_ms)
         .blue = 1 - blue,
         .duration_ms = duration_ms,
     };
+    ESP_LOGD(LEDOUTPUT_TAG, "adding to queue rgb=(%d, %d, %d)", red, green, blue);
     xQueueSend(led_queue, &led_event, 0);
 }
 
 static void leds_off()
 {
+    ESP_LOGD(LEDOUTPUT_TAG, "leds off");
     gpio_set_level(CONFIG_GPIO_OUTPUT_RED, 1);
     gpio_set_level(CONFIG_GPIO_OUTPUT_GREEN, 1);
     gpio_set_level(CONFIG_GPIO_OUTPUT_BLUE, 1);
@@ -72,6 +76,8 @@ static void led_output_task(void *pvParameters)
     {
         if (xQueueReceive(led_queue, &led_event, portMAX_DELAY))
         {
+            ESP_LOGD(LEDOUTPUT_TAG, "setting rgb=(%d, %d, %d)",
+                     led_event.red, led_event.green, led_event.blue);
             gpio_set_level(CONFIG_GPIO_OUTPUT_RED, led_event.red);
             gpio_set_level(CONFIG_GPIO_OUTPUT_GREEN, led_event.green);
             gpio_set_level(CONFIG_GPIO_OUTPUT_BLUE, led_event.blue);
