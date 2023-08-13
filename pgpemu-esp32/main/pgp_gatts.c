@@ -19,6 +19,7 @@
 #include "pgp_led_handler.h"
 #include "secrets.h"
 #include "settings.h"
+#include "battery.h"
 
 #define PROFILE_NUM 1
 #define PROFILE_APP_IDX 0
@@ -117,7 +118,6 @@ static uint8_t cert_buffer[378] = {0};
 
 static const uint16_t GATTS_SERVICE_UUID_BATTERY = 0x180f;
 static const uint16_t GATTS_CHAR_UUID_BATTERY_LEVEL = 0x2a19;
-static const uint8_t battery_char_value[1] = {0x60};
 
 static const esp_gatts_attr_db_t gatt_db_battery[BATTERY_LAST_IDX] = {
 
@@ -130,7 +130,7 @@ static const esp_gatts_attr_db_t gatt_db_battery[BATTERY_LAST_IDX] = {
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
     /* Characteristic Value */
     [IDX_CHAR_BATTERY_LEVEL_VAL] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_BATTERY_LEVEL, ESP_GATT_PERM_READ, MAX_VALUE_LENGTH, sizeof(battery_char_value), (uint8_t *)battery_char_value}},
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_BATTERY_LEVEL, ESP_GATT_PERM_READ, MAX_VALUE_LENGTH, 8, (uint8_t *)dummy_value}},
 
     /* Client Characteristic Configuration Descriptor */
     [IDX_CHAR_BATTERY_LEVEL_CFG] =
@@ -286,7 +286,12 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
                 }
             }
         }
-        break;
+
+            if (battery_handle_table[IDX_CHAR_BATTERY_LEVEL_VAL] == param->read.handle){
+                uint8_t battery_value[] = {read_battery_value()};
+                esp_ble_gatts_set_attr_value(battery_handle_table[IDX_CHAR_BATTERY_LEVEL_VAL], 8, battery_value);
+            }
+		    break;
     case ESP_GATTS_WRITE_EVT:
         ESP_LOGI(BT_GATTS_TAG, "ESP_GATTS_WRITE_EVT: %s, conn_id=%d",
                  char_name_from_handle(param->write.handle), param->write.conn_id);

@@ -15,6 +15,7 @@
 #include "settings.h"
 #include "stats.h"
 #include "uart.h"
+#include "battery.h"
 
 void app_main()
 {
@@ -77,6 +78,9 @@ void app_main()
 
     // make sure we're not turned off
     init_powerbank();
+
+    // setup io to measure the battery level
+    setup_battery_measurement();
 
     // read secrets from nvs (settings are safe to use because mutex is still locked)
     read_secrets_id(settings.chosen_device, PGP_CLONE_NAME, PGP_MAC, PGP_DEVICE_KEY, PGP_BLOB);
