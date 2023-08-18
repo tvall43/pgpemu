@@ -1,6 +1,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_random.h"
+#include "esp_mac.h"
 
 #include "pgp_handshake_multi.h"
 
@@ -102,7 +104,7 @@ void connection_start(uint16_t conn_id)
     client_state_t *entry = get_client_state_entry(conn_id);
     if (!entry)
     {
-        ESP_LOGE(HANDSHAKE_TAG, "connection_start: conn_id %d unknown", conn_id);
+        ESP_LOGI(HANDSHAKE_TAG, "connection_start: conn_id %d unknown", conn_id);
         return;
     }
     if (active_connections == 1)
@@ -114,7 +116,7 @@ void connection_start(uint16_t conn_id)
     entry->conn_id = conn_id;
     entry->connection_start = xTaskGetTickCount();
 
-    ESP_LOGI(HANDSHAKE_TAG, "conn_id=%d connected, active_connections=%d, handshake_duration=%d ms",
+    ESP_LOGI(HANDSHAKE_TAG, "conn_id=%d connected, active_connections=%d, handshake_duration=%lu ms",
              conn_id, active_connections,
              pdTICKS_TO_MS(entry->connection_start - entry->handshake_start));
 }
@@ -155,7 +157,7 @@ void connection_stop(uint16_t conn_id)
     entry->connection_end = xTaskGetTickCount();
     entry->cert_state = 0;
 
-    ESP_LOGI(HANDSHAKE_TAG, "conn_id=%d was connected for %d ms", conn_id,
+    ESP_LOGI(HANDSHAKE_TAG, "conn_id=%d was connected for %lu ms", conn_id,
              pdTICKS_TO_MS(entry->connection_end - entry->connection_start));
 
     // TODO: we scrub the client state here. this means we won't know if he has the reconnection key when he connects again
@@ -166,7 +168,7 @@ static void dump_client_state(int idx, client_state_t *entry)
 {
     ESP_LOGI(HANDSHAKE_TAG, "%d: conn_id=%d, cert_state=%d, recon_key=%d, notify=%d",
              idx, entry->conn_id, entry->cert_state, entry->has_reconnect_key, entry->notify);
-    ESP_LOGI(HANDSHAKE_TAG, "timestamps: hs=%d, rc=%d, cs=%d, ce=%d",
+    ESP_LOGI(HANDSHAKE_TAG, "timestamps: hs=%lu, rc=%lu, cs=%lu, ce=%lu",
              entry->handshake_start, entry->reconnection_at,
              entry->connection_start, entry->connection_end);
 
@@ -206,7 +208,7 @@ void dump_client_connection_times()
         client_state_t *entry = &client_states[i];
         if (entry->connection_start)
         {
-            ESP_LOGI(HANDSHAKE_TAG, "- conn_id=%d connected for %d ms",
+            ESP_LOGI(HANDSHAKE_TAG, "- conn_id=%d connected for %lu ms",
                      entry->conn_id,
                      pdTICKS_TO_MS(now - entry->connection_start));
         }

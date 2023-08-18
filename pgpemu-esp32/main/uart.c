@@ -3,6 +3,7 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "mbedtls/base64.h"
+#include <inttypes.h>
 
 #include "uart.h"
 
@@ -44,7 +45,8 @@ void init_uart()
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .rx_flow_ctrl_thresh = 0,
-        .use_ref_tick = 0};
+        .source_clk = UART_SCLK_REF_TICK};
+//        .use_ref_tick = 0};
 
     uart_param_config(EX_UART_NUM, &uart_config);
 
@@ -183,7 +185,7 @@ static void uart_event_task(void *pvParameters)
                 }
                 else if (dtmp[0] == 'r')
                 {
-                    ESP_LOGI(UART_TAG, "runtime: %d min", stats_get_runtime());
+                    ESP_LOGI(UART_TAG, "runtime: %lu min", stats_get_runtime());
                 }
                 else if (dtmp[0] == 'R')
                 {
@@ -197,7 +199,7 @@ static void uart_event_task(void *pvParameters)
                     vTaskList(buf);
 
                     ESP_LOGI(UART_TAG, "Task List:\nTask Name\tStatus\tPrio\tHWM\tTask\tAffinity\n%s", buf);
-                    ESP_LOGI(UART_TAG, "Heap free: %d bytes", esp_get_free_heap_size());
+                    ESP_LOGI(UART_TAG, "Heap free: %lu bytes", esp_get_free_heap_size());
                 }
                 else if (dtmp[0] == 'X')
                 {
@@ -266,7 +268,7 @@ static void uart_event_task(void *pvParameters)
                 break;
             // Others
             default:
-                ESP_LOGI(UART_TAG, "uart event type: %d", event.type);
+                ESP_LOGI(UART_TAG, "uart event type: %u", event.type);
                 break;
             }
         }
@@ -371,7 +373,7 @@ static void uart_secrets_handler()
             {
                 // get CRC of scratch buffer
                 uint32_t crc = get_secrets_crc32(tmp_mac, tmp_device_key, tmp_blob);
-                ESP_LOGI(UART_TAG, "slot=tmp crc=%08x", crc);
+                ESP_LOGI(UART_TAG, "slot=tmp crc=%08lu", crc);
                 break;
             }
 
@@ -382,7 +384,7 @@ static void uart_secrets_handler()
                     if (read_secrets_id(chosen_slot, tmp_clone_name, tmp_mac, tmp_device_key, tmp_blob))
                     {
                         uint32_t crc = get_secrets_crc32(tmp_mac, tmp_device_key, tmp_blob);
-                        ESP_LOGI(UART_TAG, "slot=%d crc=%08x", chosen_slot, crc);
+                        ESP_LOGI(UART_TAG, "slot=%d crc=%08lu", chosen_slot, crc);
                     }
                     else
                     {

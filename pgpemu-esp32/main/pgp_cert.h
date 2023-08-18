@@ -6,6 +6,8 @@
 #ifdef ESP_PLATFORM
 #include "esp_system.h"
 #include "aes/esp_aes.h"
+#include "esp_random.h"
+
 
 #define AES_Context esp_aes_context
 #define GEN_RANDOM esp_random

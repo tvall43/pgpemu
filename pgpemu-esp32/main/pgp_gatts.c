@@ -409,7 +409,6 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
 
         ESP_LOGW(BT_GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, reason=%d, active_connections=%d",
                  param->disconnect.reason, get_active_connections());
-
         advertise_if_needed();
         break;
     case ESP_GATTS_CREAT_ATTR_TAB_EVT:

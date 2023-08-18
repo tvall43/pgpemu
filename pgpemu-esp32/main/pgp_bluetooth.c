@@ -6,6 +6,8 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatt_common_api.h"
 #include "esp_bt_main.h"
+#include "esp_random.h"
+#include "esp_mac.h"
 
 #include "pgp_bluetooth.h"
 
